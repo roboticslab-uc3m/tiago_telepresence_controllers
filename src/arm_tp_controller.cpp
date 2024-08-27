@@ -1,4 +1,4 @@
-#include "abstract_tp_controller.hpp"
+#include "generic_tp_controller.hpp"
 
 #include <pluginlib/class_list_macros.h>
 #include <geometry_msgs/Pose.h>
@@ -6,10 +6,10 @@
 namespace tiago_controllers
 {
 
-class ArmController : public AbstractController<geometry_msgs::Pose>
+class ArmController : public GenericController<geometry_msgs::Pose>
 {
 public:
-    ArmController() : AbstractController("arm") { }
+    ArmController() : GenericController("arm") { }
 };
 
 } // namespace tiago_controllers

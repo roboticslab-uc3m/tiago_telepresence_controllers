@@ -1,4 +1,4 @@
-#include "abstract_tp_controller.hpp"
+#include "generic_tp_controller.hpp"
 
 #include <algorithm> // std::max, std::min
 #include <urdf/model.h>
@@ -6,12 +6,12 @@
 using namespace tiago_controllers;
 
 template <typename T>
-AbstractController<T>::AbstractController(const std::string & _name)
+GenericController<T>::GenericController(const std::string & _name)
     : name(_name)
 { }
 
 template <typename T>
-bool AbstractController<T>::init(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n)
+bool GenericController<T>::init(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n)
 {
     std::string robot_desc_string;
 
@@ -57,20 +57,20 @@ bool AbstractController<T>::init(hardware_interface::PositionJointInterface* hw,
         jointLimits.emplace_back(joint->limits->lower, joint->limits->upper);
     }
 
-    sub = n.subscribe<T>("telepresence/" + name, 1, &AbstractController::callback, this);
+    sub = n.subscribe<T>("telepresence/" + name, 1, &GenericController::callback, this);
 
     return true;
 }
 
 template <typename T>
-void AbstractController<T>::callback(const typename T::ConstPtr& msg)
+void GenericController<T>::callback(const typename T::ConstPtr& msg)
 {
     std::lock_guard<std::mutex> lock(mutex);
     value = *msg;
 }
 
 template <typename T>
-void AbstractController<T>::update(const ros::Time& time, const ros::Duration& period)
+void GenericController<T>::update(const ros::Time& time, const ros::Duration& period)
 {
     mutex.lock();
     auto localValue = value;

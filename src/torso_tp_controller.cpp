@@ -1,4 +1,4 @@
-#include "abstract_tp_controller.hpp"
+#include "generic_tp_controller.hpp"
 
 #include <pluginlib/class_list_macros.h>
 #include <std_msgs/Float32.h>
@@ -6,10 +6,10 @@
 namespace tiago_controllers
 {
 
-class TorsoController : public AbstractController<std_msgs::Float32>
+class TorsoController : public GenericController<std_msgs::Float32>
 {
 public:
-    TorsoController() : AbstractController("torso") { }
+    TorsoController() : GenericController("torso") { }
 };
 
 } // namespace tiago_controllers
