@@ -1,0 +1,8 @@
+<launch>
+    <node name="init_spnav" pkg="tiago_telepresence_controllers" type="init_spnav.py" output="screen"/>
+
+    <rosparam command="load" file="$(find tiago_telepresence_controllers)/config/telepresence_controllers.yaml"/>
+    <node name="telepresence_controllers_spawner"
+          pkg="controller_manager" type="spawner" output="screen"
+          args="--stopped arm_tp_controller gripper_tp_controller torso_tp_controller head_tp_controller"/>
+</launch>

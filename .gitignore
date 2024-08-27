@@ -30,3 +30,11 @@
 *.exe
 *.out
 *.app
+
+# Miscellanea
+**/build*/
+.vs/
+.vscode/
+.project
+.cproject
+.settings/
