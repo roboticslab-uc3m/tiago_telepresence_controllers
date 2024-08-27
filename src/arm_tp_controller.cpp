@@ -1,19 +1,19 @@
 #include "abstract_tp_controller.hpp"
 
 #include <pluginlib/class_list_macros.h>
+#include <geometry_msgs/Pose.h>
 
 namespace tiago_controllers
 {
 
-class ArmController : public AbstractController
+class ArmController : public AbstractController<geometry_msgs::Pose>
 {
 public:
-  void update(const ros::Time& time, const ros::Duration& period);
+    ArmController() : AbstractController("arm") { }
 };
 
 } // namespace tiago_controllers
 
-void tiago_controllers::ArmController::update(const ros::Time& time, const ros::Duration& period)
-{}
+using namespace tiago_controllers;
 
-PLUGINLIB_EXPORT_CLASS(tiago_controllers::ArmController, controller_interface::ControllerBase);
+PLUGINLIB_EXPORT_CLASS(ArmController, controller_interface::ControllerBase);

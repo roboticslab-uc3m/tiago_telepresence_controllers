@@ -9,7 +9,8 @@
 
     <depend>actionlib</depend>
     <depend>play_motion_msgs</depend>
-    <depend>sensor_msgs</depend>
+    <depend>std_msgs</depend>
+    <depend>geometry_msgs</depend>
     <depend>controller_manager_msgs</depend>
     <depend>controller_interface</depend>
     <depend>hardware_interface</depend>

@@ -1,19 +1,19 @@
 #include "abstract_tp_controller.hpp"
 
 #include <pluginlib/class_list_macros.h>
+#include <std_msgs/Float32.h>
 
 namespace tiago_controllers
 {
 
-class GripperController : public AbstractController
+class GripperController : public AbstractController<std_msgs::Float32>
 {
 public:
-  void update(const ros::Time& time, const ros::Duration& period);
+    GripperController() : AbstractController("gripper") { }
 };
 
 } // namespace tiago_controllers
 
-void tiago_controllers::GripperController::update(const ros::Time& time, const ros::Duration& period)
-{}
+using namespace tiago_controllers;
 
-PLUGINLIB_EXPORT_CLASS(tiago_controllers::GripperController, controller_interface::ControllerBase);
+PLUGINLIB_EXPORT_CLASS(GripperController, controller_interface::ControllerBase);

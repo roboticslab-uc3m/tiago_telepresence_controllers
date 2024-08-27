@@ -1,10 +1,17 @@
 #include "abstract_tp_controller.hpp"
 
+#include <algorithm> // std::max, std::min
 #include <urdf/model.h>
 
 using namespace tiago_controllers;
 
-bool AbstractController::init(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n)
+template <typename T>
+AbstractController<T>::AbstractController(const std::string & _name)
+    : name(_name)
+{ }
+
+template <typename T>
+bool AbstractController<T>::init(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n)
 {
     std::string robot_desc_string;
 
@@ -50,5 +57,31 @@ bool AbstractController::init(hardware_interface::PositionJointInterface* hw, ro
         jointLimits.emplace_back(joint->limits->lower, joint->limits->upper);
     }
 
+    sub = n.subscribe<T>("telepresence/" + name, 1, &AbstractController::callback, this);
+
     return true;
+}
+
+template <typename T>
+void AbstractController<T>::callback(const typename T::ConstPtr& msg)
+{
+    std::lock_guard<std::mutex> lock(mutex);
+    value = *msg;
+}
+
+template <typename T>
+void AbstractController<T>::update(const ros::Time& time, const ros::Duration& period)
+{
+    mutex.lock();
+    auto localValue = value;
+    mutex.unlock();
+
+    for (int i = 0; i < joints.size(); i++)
+    {
+        const auto & joint = joints[i];
+        const auto & limits = jointLimits[i];
+        const auto & position = joint.getPosition();
+
+        joint.setCommand(std::max(limits.first, std::min(limits.second, position + step * localValue.data)));
+    }
 }

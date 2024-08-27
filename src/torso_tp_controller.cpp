@@ -1,19 +1,19 @@
 #include "abstract_tp_controller.hpp"
 
 #include <pluginlib/class_list_macros.h>
+#include <std_msgs/Float32.h>
 
 namespace tiago_controllers
 {
 
-class TorsoController : public AbstractController
+class TorsoController : public AbstractController<std_msgs::Float32>
 {
 public:
-  void update(const ros::Time& time, const ros::Duration& period);
+    TorsoController() : AbstractController("torso") { }
 };
 
 } // namespace tiago_controllers
 
-void tiago_controllers::TorsoController::update(const ros::Time& time, const ros::Duration& period)
-{}
+using namespace tiago_controllers;
 
-PLUGINLIB_EXPORT_CLASS(tiago_controllers::TorsoController, controller_interface::ControllerBase);
+PLUGINLIB_EXPORT_CLASS(TorsoController, controller_interface::ControllerBase);

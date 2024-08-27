@@ -5,7 +5,8 @@ project(tiago_telepresence_controllers LANGUAGES CXX)
 find_package(catkin REQUIRED COMPONENTS
     actionlib
     play_motion_msgs
-    sensor_msgs
+    std_msgs
+    geometry_msgs
     controller_manager_msgs
     controller_interface
     hardware_interface
