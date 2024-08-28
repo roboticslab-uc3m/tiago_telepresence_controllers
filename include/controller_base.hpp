@@ -28,9 +28,11 @@ protected:
     mutable std::mutex mutex;
 
 private:
+    void registerPublisher(ros::NodeHandle &n, ros::Publisher &pub);
     ros::Time getLastStamp() const;
 
     ros::Subscriber sub;
+    ros::Publisher pub;
     std::string name;
     std::vector<hardware_interface::JointHandle> joints;
     std::vector<std::pair<double, double>> jointLimits;

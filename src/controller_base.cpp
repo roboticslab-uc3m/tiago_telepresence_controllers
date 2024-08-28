@@ -2,6 +2,7 @@
 
 #include <algorithm> // std::max, std::min
 #include <urdf/model.h>
+#include <std_msgs/Float32MultiArray.h>
 
 using namespace tiago_controllers;
 
@@ -56,8 +57,14 @@ bool ControllerBase::init(hardware_interface::PositionJointInterface* hw, ros::N
     }
 
     registerSubscriber(n, sub);
+    registerPublisher(n, pub);
 
     return true;
+}
+
+void ControllerBase::registerPublisher(ros::NodeHandle &n, ros::Publisher &pub)
+{
+    pub = n.advertise<std_msgs::Float32MultiArray>("state", 1);
 }
 
 void ControllerBase::updateStamp()
@@ -76,17 +83,26 @@ void ControllerBase::update(const ros::Time& time, const ros::Duration& period)
 {
     static const ros::Duration timeout(INPUT_TIMEOUT);
 
+    std_msgs::Float32MultiArray msg;
+
+    for (const auto & joint : joints)
+    {
+        msg.data.push_back(joint.getPosition());
+    }
+
+    pub.publish(msg);
+
     if (time - getLastStamp() > timeout)
     {
         return;
     }
 
-    const auto desired = getDesiredJointValues();
+    const auto targets = getDesiredJointValues();
 
-    if (desired.size() != joints.size())
+    if (targets.size() != joints.size())
     {
-        ROS_ERROR("Invalid desired joint values size in %s controller: got %d, but %d was expected",
-                  name.c_str(), desired.size(), joints.size());
+        ROS_ERROR("Invalid targets joint values size in %s controller: got %d, but %d was expected",
+                  name.c_str(), targets.size(), joints.size());
         return;
     }
 
@@ -95,7 +111,8 @@ void ControllerBase::update(const ros::Time& time, const ros::Duration& period)
         auto & joint = joints[i];
         const auto & limits = jointLimits[i];
         const auto & position = joint.getPosition();
+        const auto computed = std::max(limits.first, std::min(limits.second, position + step * targets[i]));
 
-        joint.setCommand(std::max(limits.first, std::min(limits.second, position + step * desired[i])));
+        joint.setCommand(computed);
     }
 }
