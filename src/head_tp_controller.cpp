@@ -14,6 +14,4 @@ public:
 
 } // namespace tiago_controllers
 
-using namespace tiago_controllers;
-
-PLUGINLIB_EXPORT_CLASS(HeadController, controller_interface::ControllerBase);
+PLUGINLIB_EXPORT_CLASS(tiago_controllers::HeadController, controller_interface::ControllerBase);

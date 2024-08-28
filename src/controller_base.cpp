@@ -1,18 +1,16 @@
-#include "generic_tp_controller.hpp"
+#include "controller_base.hpp"
 
 #include <algorithm> // std::max, std::min
 #include <urdf/model.h>
 
 using namespace tiago_controllers;
 
-template <typename T>
-GenericController<T>::GenericController(const std::string & _name)
-    : name(_name)
-{ }
+constexpr auto INPUT_TIMEOUT = 0.25; // [s]
 
-template <typename T>
-bool GenericController<T>::init(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n)
+bool ControllerBase::init(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n)
 {
+    ROS_INFO("Initializing %s controller", name.c_str());
+
     std::string robot_desc_string;
 
     if (!n.getParam("/robot_description", robot_desc_string))
@@ -57,31 +55,47 @@ bool GenericController<T>::init(hardware_interface::PositionJointInterface* hw, 
         jointLimits.emplace_back(joint->limits->lower, joint->limits->upper);
     }
 
-    sub = n.subscribe<T>("telepresence/" + name, 1, &GenericController::callback, this);
+    registerSubscriber(n, sub);
 
     return true;
 }
 
-template <typename T>
-void GenericController<T>::callback(const typename T::ConstPtr& msg)
+void ControllerBase::updateStamp()
 {
-    std::lock_guard<std::mutex> lock(mutex);
-    value = *msg;
+    // callers must lock mutex
+    stamp = ros::Time::now();
 }
 
-template <typename T>
-void GenericController<T>::update(const ros::Time& time, const ros::Duration& period)
+ros::Time ControllerBase::getLastStamp() const
 {
-    mutex.lock();
-    auto localValue = value;
-    mutex.unlock();
+    std::lock_guard<std::mutex> lock(mutex);
+    return stamp;
+}
+
+void ControllerBase::update(const ros::Time& time, const ros::Duration& period)
+{
+    static const ros::Duration timeout(INPUT_TIMEOUT);
+
+    if (time - getLastStamp() > timeout)
+    {
+        return;
+    }
+
+    const auto desired = getDesiredJointValues();
+
+    if (desired.size() != joints.size())
+    {
+        ROS_ERROR("Invalid desired joint values size in %s controller: got %d, but %d was expected",
+                  name.c_str(), desired.size(), joints.size());
+        return;
+    }
 
     for (int i = 0; i < joints.size(); i++)
     {
-        const auto & joint = joints[i];
+        auto & joint = joints[i];
         const auto & limits = jointLimits[i];
         const auto & position = joint.getPosition();
 
-        joint.setCommand(std::max(limits.first, std::min(limits.second, position + step * localValue.data)));
+        joint.setCommand(std::max(limits.first, std::min(limits.second, position + step * desired[i])));
     }
 }

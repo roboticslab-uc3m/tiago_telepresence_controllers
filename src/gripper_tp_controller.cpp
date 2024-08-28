@@ -1,19 +1,20 @@
 #include "generic_tp_controller.hpp"
 
 #include <pluginlib/class_list_macros.h>
-#include <std_msgs/Float32.h>
+#include <std_msgs/Int32.h>
 
 namespace tiago_controllers
 {
 
-class GripperController : public GenericController<std_msgs::Float32>
+class GripperController : public GenericController<std_msgs::Int32>
 {
 public:
     GripperController() : GenericController("gripper") { }
+
+    std::vector<double> getDesiredJointValues() override
+    { return {value.data, value.data}; }
 };
 
 } // namespace tiago_controllers
 
-using namespace tiago_controllers;
-
-PLUGINLIB_EXPORT_CLASS(GripperController, controller_interface::ControllerBase);
+PLUGINLIB_EXPORT_CLASS(tiago_controllers::GripperController, controller_interface::ControllerBase);

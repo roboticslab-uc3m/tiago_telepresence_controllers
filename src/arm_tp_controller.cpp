@@ -14,6 +14,4 @@ public:
 
 } // namespace tiago_controllers
 
-using namespace tiago_controllers;
-
-PLUGINLIB_EXPORT_CLASS(ArmController, controller_interface::ControllerBase);
+PLUGINLIB_EXPORT_CLASS(tiago_controllers::ArmController, controller_interface::ControllerBase);

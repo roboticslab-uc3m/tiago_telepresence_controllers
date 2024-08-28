@@ -1,37 +1,42 @@
 #ifndef __TIAGO_GENERIC_TP_CONTROLLER_HPP__
 #define __TIAGO_GENERIC_TP_CONTROLLER_HPP__
 
-#include <mutex>
 #include <string>
-#include <utility> // std::pair
-#include <vector>
-#include <controller_interface/controller.h>
-#include <hardware_interface/joint_command_interface.h>
+
+#include "controller_base.hpp"
 
 namespace tiago_controllers
 {
 
 template <typename T>
-class GenericController : public controller_interface::Controller<hardware_interface::PositionJointInterface>
+class GenericController : public ControllerBase
 {
 public:
-    GenericController(const std::string & name);
-    bool init(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n) override;
-    void update(const ros::Time& time, const ros::Duration& period) override;
+    GenericController(const std::string & name) : ControllerBase(name) { }
 
 protected:
-    std::string name;
-    ros::Subscriber sub;
-    std::vector<hardware_interface::JointHandle> joints;
-    std::vector<std::pair<double, double>> jointLimits;
-    double step {0.0};
+    std::vector<double> getDesiredJointValues()
+    {
+        return std::vector<double>(getJointCount(), 0.0);
+    }
+
     T value;
-    mutable std::mutex mutex;
 
 private:
-    void callback(const typename T::ConstPtr& msg);
+    void registerSubscriber(ros::NodeHandle &n, ros::Subscriber &sub) override
+    {
+        sub = n.subscribe<T>("command", 1, &GenericController::callback, this);
+    }
+
+    void callback(const typename T::ConstPtr& msg)
+    {
+        ROS_DEBUG("Received message");
+        std::lock_guard<std::mutex> lock(mutex);
+        value = *msg;
+        updateStamp();
+    }
 };
 
-} // namespace
+} // namespace tiago_controllers
 
 #endif // __TIAGO_GENERIC_TP_CONTROLLER_HPP__

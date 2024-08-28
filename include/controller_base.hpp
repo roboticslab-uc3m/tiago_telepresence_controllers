@@ -1,0 +1,43 @@
+#ifndef __TIAGO_TP_CONTROLLER_BASE_HPP__
+#define __TIAGO_TP_CONTROLLER_BASE_HPP__
+
+#include <mutex>
+#include <string>
+#include <utility> // std::pair
+#include <vector>
+#include <controller_interface/controller.h>
+#include <hardware_interface/joint_command_interface.h>
+
+namespace tiago_controllers
+{
+
+class ControllerBase : public controller_interface::Controller<hardware_interface::PositionJointInterface>
+{
+public:
+    ControllerBase(const std::string &_name) : name(_name) {}
+    bool init(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n) override;
+    void update(const ros::Time& time, const ros::Duration& period) override;
+
+protected:
+    std::string getName() const { return name; }
+    int getJointCount() const { return joints.size(); }
+    virtual void registerSubscriber(ros::NodeHandle &n, ros::Subscriber &sub) = 0;
+    virtual std::vector<double> getDesiredJointValues() = 0;
+    void updateStamp();
+
+    mutable std::mutex mutex;
+
+private:
+    ros::Time getLastStamp() const;
+
+    ros::Subscriber sub;
+    std::string name;
+    std::vector<hardware_interface::JointHandle> joints;
+    std::vector<std::pair<double, double>> jointLimits;
+    double step {0.0};
+    ros::Time stamp;
+};
+
+} // namespace tiago_controllers
+
+#endif // __TIAGO_TP_CONTROLLER_BASE_HPP__

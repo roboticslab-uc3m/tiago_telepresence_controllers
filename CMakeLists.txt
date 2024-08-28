@@ -26,7 +26,7 @@ include_directories(
     ${orocos_kdl_INCLUDE_DIRS}
 )
 
-add_library(${PROJECT_NAME} src/generic_tp_controller.cpp
+add_library(${PROJECT_NAME} src/controller_base.cpp
                             src/head_tp_controller.cpp
                             src/torso_tp_controller.cpp
                             src/gripper_tp_controller.cpp
