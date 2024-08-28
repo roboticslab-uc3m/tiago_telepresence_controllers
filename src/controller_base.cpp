@@ -108,11 +108,9 @@ void ControllerBase::update(const ros::Time& time, const ros::Duration& period)
 
     for (int i = 0; i < joints.size(); i++)
     {
-        auto & joint = joints[i];
         const auto & limits = jointLimits[i];
-        const auto & position = joint.getPosition();
-        const auto computed = std::max(limits.first, std::min(limits.second, position + step * targets[i]));
+        const auto computed = std::max(limits.first, std::min(limits.second, msg.data[i] + step * targets[i]));
 
-        joint.setCommand(computed);
+        joints[i].setCommand(computed);
     }
 }
