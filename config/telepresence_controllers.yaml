@@ -1,7 +1,6 @@
 head_tp_controller:
   type: "tiago_telepresence_controllers/HeadControllerPlugin"
   joint_names: ["head_1_joint", "head_2_joint"]
-  step: 0.1
 
 torso_tp_controller:
   type: "tiago_telepresence_controllers/TorsoControllerPlugin"
@@ -16,4 +15,3 @@ gripper_tp_controller:
 arm_tp_controller:
   type: "tiago_telepresence_controllers/ArmControllerPlugin"
   joint_names: ["arm_1_joint", "arm_2_joint", "arm_3_joint", "arm_4_joint", "arm_5_joint", "arm_6_joint", "arm_7_joint"]
-  step: 0.1

@@ -12,7 +12,7 @@ template <typename T>
 class GenericController : public ControllerBase
 {
 public:
-    GenericController(const std::string & name) : ControllerBase(name) { }
+    using ControllerBase::ControllerBase;
 
 protected:
     std::vector<double> getDesiredJointValues()

@@ -14,7 +14,7 @@ namespace tiago_controllers
 class ControllerBase : public controller_interface::Controller<hardware_interface::PositionJointInterface>
 {
 public:
-    ControllerBase(const std::string &_name) : name(_name) {}
+    ControllerBase(const std::string &_name, bool _isStepping) : name(_name), isStepping(_isStepping) {}
     bool init(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n) override;
     void update(const ros::Time& time, const ros::Duration& period) override;
 
@@ -34,6 +34,7 @@ private:
     ros::Subscriber sub;
     ros::Publisher pub;
     std::string name;
+    bool isStepping {false};
     std::vector<hardware_interface::JointHandle> joints;
     std::vector<std::pair<double, double>> jointLimits;
     double step {0.0};

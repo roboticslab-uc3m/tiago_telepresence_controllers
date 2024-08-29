@@ -2,6 +2,7 @@
 
 #include <pluginlib/class_list_macros.h>
 #include <geometry_msgs/Quaternion.h>
+#include <kdl/frames.hpp>
 
 namespace tiago_controllers
 {
@@ -9,7 +10,15 @@ namespace tiago_controllers
 class HeadController : public GenericController<geometry_msgs::Quaternion>
 {
 public:
-    HeadController() : GenericController("head") { }
+    HeadController() : GenericController("head", false) { }
+
+    std::vector<double> getDesiredJointValues() override
+    {
+        auto rot = KDL::Rotation::Quaternion(value.x, value.y, value.z, value.w);
+        double alfa, beta, gamma;
+        rot.GetEulerZYX(alfa, beta, gamma);
+        return {-beta, -gamma};
+    }
 };
 
 } // namespace tiago_controllers

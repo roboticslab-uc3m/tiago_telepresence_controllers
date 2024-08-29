@@ -9,7 +9,7 @@ namespace tiago_controllers
 class TorsoController : public GenericController<std_msgs::Int32>
 {
 public:
-    TorsoController() : GenericController("torso") { }
+    TorsoController() : GenericController("torso", true) { }
 
     std::vector<double> getDesiredJointValues() override
     { return {value.data}; }

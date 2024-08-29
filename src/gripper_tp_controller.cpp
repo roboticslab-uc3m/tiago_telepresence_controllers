@@ -9,7 +9,7 @@ namespace tiago_controllers
 class GripperController : public GenericController<std_msgs::Int32>
 {
 public:
-    GripperController() : GenericController("gripper") { }
+    GripperController() : GenericController("gripper", true) { }
 
     std::vector<double> getDesiredJointValues() override
     { return {value.data, value.data}; }

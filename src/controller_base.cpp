@@ -36,7 +36,7 @@ bool ControllerBase::init(hardware_interface::PositionJointInterface* hw, ros::N
         return false;
     }
 
-    if (!n.getParam("step", step))
+    if (isStepping && !n.getParam("step", step))
     {
         ROS_ERROR("Could not retrieve step");
         return false;
@@ -109,7 +109,8 @@ void ControllerBase::update(const ros::Time& time, const ros::Duration& period)
     for (int i = 0; i < joints.size(); i++)
     {
         const auto & limits = jointLimits[i];
-        const auto computed = std::max(limits.first, std::min(limits.second, msg.data[i] + step * targets[i]));
+        const auto target = isStepping ? (msg.data[i] + step * targets[i]) : targets[i];
+        const auto computed = std::max(limits.first, std::min(limits.second, target));
 
         joints[i].setCommand(computed);
     }

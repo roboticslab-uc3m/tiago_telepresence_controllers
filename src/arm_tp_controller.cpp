@@ -9,7 +9,7 @@ namespace tiago_controllers
 class ArmController : public GenericController<geometry_msgs::Pose>
 {
 public:
-    ArmController() : GenericController("arm") { }
+    ArmController() : GenericController("arm", false) { }
 };
 
 } // namespace tiago_controllers
