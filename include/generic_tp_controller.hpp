@@ -30,7 +30,6 @@ private:
 
     void callback(const typename T::ConstPtr& msg)
     {
-        ROS_DEBUG("Received message");
         std::lock_guard<std::mutex> lock(mutex);
         value = *msg;
         updateStamp();
