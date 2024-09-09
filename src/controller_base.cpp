@@ -12,8 +12,6 @@ bool ControllerBase::init(hardware_interface::PositionJointInterface* hw, ros::N
 {
     ROS_INFO("Initializing %s controller", name.c_str());
 
-    std::string robot_desc_string;
-
     if (!n.getParam("/robot_description", robot_desc_string))
     {
         ROS_ERROR("Could not find robot_description");
@@ -59,7 +57,7 @@ bool ControllerBase::init(hardware_interface::PositionJointInterface* hw, ros::N
     registerSubscriber(n, sub);
     registerPublisher(n, pub);
 
-    return true;
+    return additionalSetup(hw, n);
 }
 
 void ControllerBase::registerPublisher(ros::NodeHandle &n, ros::Publisher &pub)

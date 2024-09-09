@@ -15,19 +15,19 @@ public:
     using ControllerBase::ControllerBase;
 
 protected:
-    std::vector<double> getDesiredJointValues()
+    std::vector<double> getDesiredJointValues() override
     {
         return std::vector<double>(getJointCount(), 0.0);
+    }
+
+    void registerSubscriber(ros::NodeHandle &n, ros::Subscriber &sub) final override
+    {
+        sub = n.subscribe<T>("command", 1, &GenericController::callback, this);
     }
 
     T value;
 
 private:
-    void registerSubscriber(ros::NodeHandle &n, ros::Subscriber &sub) override
-    {
-        sub = n.subscribe<T>("command", 1, &GenericController::callback, this);
-    }
-
     void callback(const typename T::ConstPtr& msg)
     {
         std::lock_guard<std::mutex> lock(mutex);

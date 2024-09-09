@@ -15,16 +15,18 @@ class ControllerBase : public controller_interface::Controller<hardware_interfac
 {
 public:
     ControllerBase(const std::string &_name, bool _isStepping) : name(_name), isStepping(_isStepping) {}
-    bool init(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n) override;
-    void update(const ros::Time& time, const ros::Duration& period) override;
+    bool init(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n) final override;
+    void update(const ros::Time& time, const ros::Duration& period) final override;
 
 protected:
     std::string getName() const { return name; }
     int getJointCount() const { return joints.size(); }
+    virtual bool additionalSetup(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n) { return true; }
     virtual void registerSubscriber(ros::NodeHandle &n, ros::Subscriber &sub) = 0;
     virtual std::vector<double> getDesiredJointValues() = 0;
     void updateStamp();
 
+    std::string robot_desc_string;
     mutable std::mutex mutex;
 
 private:
