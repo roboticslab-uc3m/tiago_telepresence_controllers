@@ -12,7 +12,10 @@ public:
     TorsoController() : GenericController("torso", true) { }
 
     std::vector<double> getDesiredJointValues() override
-    { return {value.data}; }
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        return {value.data};
+    }
 };
 
 } // namespace tiago_controllers

@@ -12,7 +12,10 @@ public:
     GripperController() : GenericController("gripper", true) { }
 
     std::vector<double> getDesiredJointValues() override
-    { return {value.data, value.data}; }
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        return {value.data, value.data};
+    }
 };
 
 } // namespace tiago_controllers

@@ -14,7 +14,10 @@ public:
 
     std::vector<double> getDesiredJointValues() override
     {
+        mutex.lock();
         auto rot = KDL::Rotation::Quaternion(value.x, value.y, value.z, value.w);
+        mutex.unlock();
+
         double alfa, beta, gamma;
         rot.GetEulerZYX(alfa, beta, gamma);
         return {-beta, -gamma};
