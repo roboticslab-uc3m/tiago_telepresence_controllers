@@ -108,19 +108,15 @@ void ControllerBase::update(const ros::Time& time, const ros::Duration& period)
 
     const auto targets = getDesiredJointValues(period);
 
-    if (targets.size() != joints.size())
+    if (targets.size() == joints.size())
     {
-        ROS_ERROR("Invalid targets joint values size in %s controller: got %d, but %d was expected",
-                  name.c_str(), targets.size(), joints.size());
-        return;
-    }
+        for (int i = 0; i < joints.size(); i++)
+        {
+            const auto & limits = jointLimits[i];
+            const auto target = isStepping ? (msg.data[i] + step * targets[i]) : targets[i];
 
-    for (int i = 0; i < joints.size(); i++)
-    {
-        const auto & limits = jointLimits[i];
-        const auto target = isStepping ? (msg.data[i] + step * targets[i]) : targets[i];
-
-        jointAngles[i] = std::max(limits.first, std::min(limits.second, target));
-        joints[i].setCommand(jointAngles[i]);
+            jointAngles[i] = std::max(limits.first, std::min(limits.second, target));
+            joints[i].setCommand(jointAngles[i]);
+        }
     }
 }
