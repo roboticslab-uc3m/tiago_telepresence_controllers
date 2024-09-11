@@ -11,7 +11,8 @@ class GripperController : public GenericController<std_msgs::Int32>
 public:
     GripperController() : GenericController("gripper", true) { }
 
-    std::vector<double> getDesiredJointValues() override
+protected:
+    std::vector<double> getDesiredJointValues(const ros::Duration& period) override
     {
         std::lock_guard<std::mutex> lock(mutex);
         return {value.data, value.data};

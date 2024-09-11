@@ -15,7 +15,7 @@ public:
     using ControllerBase::ControllerBase;
 
 protected:
-    std::vector<double> getDesiredJointValues() override
+    std::vector<double> getDesiredJointValues(const ros::Duration& period) override
     {
         return std::vector<double>(getJointCount(), 0.0);
     }

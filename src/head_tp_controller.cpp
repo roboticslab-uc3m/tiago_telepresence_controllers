@@ -12,7 +12,8 @@ class HeadController : public GenericController<geometry_msgs::Quaternion>
 public:
     HeadController() : GenericController("head", false) { }
 
-    std::vector<double> getDesiredJointValues() override
+protected:
+    std::vector<double> getDesiredJointValues(const ros::Duration& period) override
     {
         mutex.lock();
         auto rot = KDL::Rotation::Quaternion(value.x, value.y, value.z, value.w);

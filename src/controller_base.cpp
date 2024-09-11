@@ -57,6 +57,17 @@ bool ControllerBase::init(hardware_interface::PositionJointInterface* hw, ros::N
     registerSubscriber(n, sub);
     registerPublisher(n, pub);
 
+    jointAngles.resize(joints.size());
+    std::string out;
+
+    for (int i = 0; i < joints.size(); i++)
+    {
+        jointAngles[i] = joints[i].getPosition();
+        out += " " + std::to_string(jointAngles[i]);
+    }
+
+    ROS_INFO("Initial joint configuration for %s:%s", name.c_str(), out.c_str());
+
     return additionalSetup(hw, n);
 }
 
@@ -95,7 +106,7 @@ void ControllerBase::update(const ros::Time& time, const ros::Duration& period)
         return;
     }
 
-    const auto targets = getDesiredJointValues();
+    const auto targets = getDesiredJointValues(period);
 
     if (targets.size() != joints.size())
     {
@@ -108,8 +119,8 @@ void ControllerBase::update(const ros::Time& time, const ros::Duration& period)
     {
         const auto & limits = jointLimits[i];
         const auto target = isStepping ? (msg.data[i] + step * targets[i]) : targets[i];
-        const auto computed = std::max(limits.first, std::min(limits.second, target));
 
-        joints[i].setCommand(computed);
+        jointAngles[i] = std::max(limits.first, std::min(limits.second, target));
+        joints[i].setCommand(jointAngles[i]);
     }
 }
