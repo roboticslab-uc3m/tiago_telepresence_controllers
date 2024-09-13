@@ -1,6 +1,7 @@
 <launch>
     <rosparam file="$(find tiago_telepresence_controllers)/config/telepresence_motions.yaml" command="load" />
     <node name="init_telepresence" pkg="tiago_telepresence_controllers" type="init_telepresence.py" output="screen"/>
+    <node name="tp_arm_motion" pkg="tiago_telepresence_controllers" type="arm_motion.py" output="screen"/>
 
     <rosparam command="load" file="$(find tiago_telepresence_controllers)/config/telepresence_controllers.yaml"/>
     <node name="telepresence_controllers_spawner"

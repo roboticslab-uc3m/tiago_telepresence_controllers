@@ -19,6 +19,8 @@
     <depend>orocos_kdl</depend>
     <depend>kdl_parser</depend>
     <depend>urdf</depend>
+    <depend>message_generation</depend>
+    <depend>message_runtime</depend>
 
     <export>
         <controller_interface plugin="${prefix}/tiago_telepresence_controllers_plugins.xml"/>

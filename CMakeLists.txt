@@ -14,9 +14,20 @@ find_package(catkin REQUIRED COMPONENTS
     roscpp
     kdl_parser
     urdf
+    message_generation
 )
 
 find_package(orocos_kdl REQUIRED)
+
+add_service_files(
+    FILES
+    ArmMotion.srv
+)
+
+generate_messages(
+    DEPENDENCIES
+    std_msgs
+)
 
 catkin_package()
 
@@ -47,6 +58,7 @@ install(DIRECTORY config launch
 
 install(PROGRAMS scripts/init_telepresence.py
                  scripts/stop_telepresence.py
+                 scripts/action_server.py
         DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
