@@ -45,6 +45,12 @@ public:
         delete ikSolverVel;
     }
 
+    void starting(const ros::Time &time) override
+    {
+        std::vector<double> jointAngles = getJoints();
+        fkSolverPos->JntToCart(vectorToKdl(jointAngles), H_initial);
+    }
+
 protected:
     bool additionalSetup(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n) override;
     std::vector<double> getDesiredJointValues(const ros::Duration& period) override;
@@ -110,9 +116,6 @@ bool tiago_controllers::ArmController::additionalSetup(hardware_interface::Posit
 
     fkSolverPos = new KDL::ChainFkSolverPos_recursive(chain);
     ikSolverVel = new KDL::ChainIkSolverVel_pinv(chain, eps, maxIter);
-
-    std::vector<double> jointAngles = getJoints();
-    fkSolverPos->JntToCart(vectorToKdl(jointAngles), H_initial);
 
     return true;
 }
