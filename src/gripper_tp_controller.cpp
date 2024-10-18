@@ -12,10 +12,12 @@ public:
     GripperController() : GenericController("gripper", true) { }
 
 protected:
-    std::vector<double> getDesiredJointValues(const ros::Duration& period) override
+    bool getDesiredJointValues(const ros::Duration& period, const std::vector<double> & current, std::vector<double> & desired) override
     {
         std::lock_guard<std::mutex> lock(mutex);
-        return {value.data, value.data};
+        const auto v = static_cast<double>(value.data);
+        desired = {v, v};
+        return true;
     }
 };
 

@@ -93,27 +93,37 @@ void ControllerBase::update(const ros::Time& time, const ros::Duration& period)
     static const ros::Duration timeout(INPUT_TIMEOUT);
 
     std_msgs::Float32MultiArray msg;
+    std::vector<double> current;
 
     for (const auto & joint : joints)
     {
-        msg.data.push_back(joint.getPosition());
+        const auto position = joint.getPosition();
+        msg.data.push_back(position);
+        current.push_back(position);
     }
 
     pub.publish(msg);
 
     if (time - getLastStamp() > timeout)
     {
+        isActive = false;
         return;
     }
+    else if (!isActive)
+    {
+        onStarting(current);
+    }
 
-    const auto targets = getDesiredJointValues(period);
+    isActive = true;
 
-    if (targets.size() == joints.size())
+    std::vector<double> desired;
+
+    if (getDesiredJointValues(period, current, desired) && desired.size() == joints.size())
     {
         for (int i = 0; i < joints.size(); i++)
         {
             const auto & limits = jointLimits[i];
-            const auto target = isStepping ? (msg.data[i] + step * targets[i]) : targets[i];
+            const auto target = isStepping ? (msg.data[i] + step * desired[i]) : desired[i];
 
             jointAngles[i] = std::max(limits.first, std::min(limits.second, target));
             joints[i].setCommand(jointAngles[i]);

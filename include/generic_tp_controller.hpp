@@ -15,9 +15,18 @@ public:
     using ControllerBase::ControllerBase;
 
 protected:
-    std::vector<double> getDesiredJointValues(const ros::Duration& period) override
+    bool getDesiredJointValues(const ros::Duration& period, const std::vector<double> & current, std::vector<double> & desired) override
     {
-        return std::vector<double>(getJointCount(), 0.0);
+        if (!isSteppingEnabled())
+        {
+            desired = current;
+        }
+        else
+        {
+            desired.resize(current.size());
+        }
+
+        return true;
     }
 
     void registerSubscriber(ros::NodeHandle &n, ros::Subscriber &sub) final override

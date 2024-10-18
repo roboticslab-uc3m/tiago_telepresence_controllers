@@ -13,7 +13,7 @@ public:
     HeadController() : GenericController("head", false) { }
 
 protected:
-    std::vector<double> getDesiredJointValues(const ros::Duration& period) override
+    bool getDesiredJointValues(const ros::Duration& period, const std::vector<double> & current, std::vector<double> & desired) override
     {
         mutex.lock();
         auto rot = KDL::Rotation::Quaternion(value.x, value.y, value.z, value.w);
@@ -21,7 +21,9 @@ protected:
 
         double alfa, beta, gamma;
         rot.GetEulerZYX(alfa, beta, gamma);
-        return {-beta, -gamma};
+        desired = {-beta, -gamma};
+
+        return true;
     }
 };
 

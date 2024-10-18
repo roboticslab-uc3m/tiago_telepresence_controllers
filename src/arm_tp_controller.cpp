@@ -1,6 +1,5 @@
 #include "generic_tp_controller.hpp"
 
-#include <algorithm> // std::copy
 #include <pluginlib/class_list_macros.h>
 #include <geometry_msgs/Pose.h>
 
@@ -13,13 +12,19 @@
 #include <kdl/tree.hpp>
 
 constexpr auto UPDATE_LOG_THROTTLE = 1.0; // [s]
+constexpr auto TIMEOUT = 1.0; // [s]
 
 namespace
 {
     KDL::JntArray vectorToKdl(const std::vector<double> & q)
     {
         KDL::JntArray ret(q.size());
-        std::copy(q.begin(), q.end(), ret.data.data());
+
+        for (int i = 0; i < q.size(); i++)
+        {
+            ret(i) = q[i];
+        }
+
         return ret;
     }
 
@@ -45,15 +50,17 @@ public:
         delete ikSolverVel;
     }
 
-    void starting(const ros::Time &time) override
+    void onStarting(const std::vector<double> & angles) override
     {
-        std::vector<double> jointAngles = getJoints();
-        fkSolverPos->JntToCart(vectorToKdl(jointAngles), H_initial);
+        q = vectorToKdl(angles);
+        fkSolverPos->JntToCart(q, H_0_N_initial);
+        ROS_INFO("Initial position: %f %f %f", H_0_N_initial.p.x(), H_0_N_initial.p.y(), H_0_N_initial.p.z());
+        H_0_N_prev = H_0_N_initial;
     }
 
 protected:
     bool additionalSetup(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n) override;
-    std::vector<double> getDesiredJointValues(const ros::Duration& period) override;
+    bool getDesiredJointValues(const ros::Duration& period, const std::vector<double> & current, std::vector<double> & desired) override;
 
 private:
     bool checkReturnCode(int ret);
@@ -61,8 +68,9 @@ private:
     KDL::Chain chain;
     KDL::ChainFkSolverPos_recursive * fkSolverPos {nullptr};
     KDL::ChainIkSolverVel_pinv * ikSolverVel {nullptr};
-    KDL::Frame H_initial;
-    KDL::Frame H_prev;
+    KDL::Frame H_0_N_initial;
+    KDL::Frame H_0_N_prev;
+    KDL::JntArray q;
 };
 
 } // namespace tiago_controllers
@@ -120,53 +128,64 @@ bool tiago_controllers::ArmController::additionalSetup(hardware_interface::Posit
     return true;
 }
 
-std::vector<double> tiago_controllers::ArmController::getDesiredJointValues(const ros::Duration& period)
+bool tiago_controllers::ArmController::getDesiredJointValues(const ros::Duration& period, const std::vector<double> & current, std::vector<double> & desired)
 {
-    KDL::Frame H;
+    KDL::Frame H_N; // change in pose between initial and desired, referred to the TCP
 
     {
         std::lock_guard<std::mutex> lock(mutex);
-        H.p = KDL::Vector(value.position.x, value.position.y, value.position.z);
-        H.M = KDL::Rotation::Quaternion(value.orientation.x, value.orientation.y, value.orientation.z, value.orientation.w);
+        H_N.p = KDL::Vector(value.position.x, value.position.y, value.position.z);
+        // H_N.M = KDL::Rotation::Quaternion(value.orientation.x, value.orientation.y, value.orientation.z, value.orientation.w);
+        H_N.M = KDL::Rotation::Identity();
     }
 
-    auto twist = KDL::diff(H_prev, H, period.toSec());
-    auto q = vectorToKdl(getJoints());
+    ROS_INFO("Desired position: %f %f %f", H_N.p.x(), H_N.p.y(), H_N.p.z());
+
+    auto H_0_N_desired = H_0_N_initial * H_N;
+    ROS_INFO("Desired position in base frame: %f %f %f", H_0_N_desired.p.x(), H_0_N_desired.p.y(), H_0_N_desired.p.z());
+    auto twist = KDL::diff(H_0_N_prev, H_0_N_desired, period.toSec());
+    ROS_INFO("Twist: %f %f %f", twist.vel.x(), twist.vel.y(), twist.vel.z());
 
     // refer to base frame, but leave the reference point intact
-    twist = H_initial.M.Inverse() * twist;
+    twist = H_0_N_initial.M.Inverse() * twist;
+    ROS_INFO("Twist in base frame: %f %f %f", twist.vel.x(), twist.vel.y(), twist.vel.z());
 
     KDL::JntArray qdot(getJointCount());
 
-    if (!checkReturnCode(ikSolverVel->CartToJnt(q, twist, qdot)))
+    if (!checkReturnCode(ikSolverVel->CartToJnt(vectorToKdl(current), twist, qdot)))
     {
-        return {};
+        ROS_WARN("Could not calculate joint velocities (1)");
+        return false;
     }
 
-    const auto & armJointLimits = getJointLimits();
+    const auto & limits = getJointLimits();
+    auto q_temp = q;
 
     for (int i = 0; i < getJointCount(); i++)
     {
-        q(i) += qdot(i) * period.toSec();
+        q_temp(i) += qdot(i) * period.toSec();
 
-        if (q(i) < armJointLimits[i].first || q(i) > armJointLimits[i].second)
+        if (q_temp(i) < limits[i].first || q_temp(i) > limits[i].second)
         {
-            ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "Joint %d out of limits: %f not in [%f, %f]",
-                                                   i, q(i), armJointLimits[i].first, armJointLimits[i].second);
-            return {};
+            ROS_WARN("Joint %d out of limits: %f not in [%f, %f]", i, q_temp(i), limits[i].first, limits[i].second);
+            return false;
         }
     }
 
     KDL::JntArray qdot_temp(chain.getNrOfJoints());
 
-    if (!checkReturnCode(ikSolverVel->CartToJnt(q, twist, qdot_temp)))
+    if (!checkReturnCode(ikSolverVel->CartToJnt(q_temp, twist, qdot_temp)))
     {
-        return {};
+        ROS_WARN("Could not calculate joint velocities (2)");
+        return false;
     }
 
-    H_prev = H; // no singular point, so update the calculated pose
+    // no singular point, so update the calculated pose and joint values
+    H_0_N_prev = H_0_N_desired;
+    q = q_temp;
 
-    return kdlToVector(q);
+    desired = kdlToVector(q);
+    return true;
 }
 
 bool tiago_controllers::ArmController::checkReturnCode(int ret)
