@@ -3,11 +3,8 @@ cmake_minimum_required(VERSION 3.0)
 project(tiago_telepresence_controllers LANGUAGES CXX)
 
 find_package(catkin REQUIRED COMPONENTS
-    actionlib
-    play_motion_msgs
     std_msgs
     geometry_msgs
-    controller_manager_msgs
     controller_interface
     hardware_interface
     pluginlib
@@ -58,7 +55,7 @@ install(DIRECTORY config launch
 
 install(PROGRAMS scripts/init_telepresence.py
                  scripts/stop_telepresence.py
-                 scripts/action_server.py
+                 scripts/arm_motion.py
         DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
