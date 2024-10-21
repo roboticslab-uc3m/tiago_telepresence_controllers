@@ -135,26 +135,21 @@ bool tiago_controllers::ArmController::getDesiredJointValues(const ros::Duration
     {
         std::lock_guard<std::mutex> lock(mutex);
         H_N.p = KDL::Vector(value.position.x, value.position.y, value.position.z);
-        // H_N.M = KDL::Rotation::Quaternion(value.orientation.x, value.orientation.y, value.orientation.z, value.orientation.w);
+        H_N.M = KDL::Rotation::Quaternion(value.orientation.x, value.orientation.y, value.orientation.z, value.orientation.w);
         H_N.M = KDL::Rotation::Identity();
     }
 
-    ROS_INFO("Desired position: %f %f %f", H_N.p.x(), H_N.p.y(), H_N.p.z());
-
     auto H_0_N_desired = H_0_N_initial * H_N;
-    ROS_INFO("Desired position in base frame: %f %f %f", H_0_N_desired.p.x(), H_0_N_desired.p.y(), H_0_N_desired.p.z());
     auto twist = KDL::diff(H_0_N_prev, H_0_N_desired, period.toSec());
-    ROS_INFO("Twist: %f %f %f", twist.vel.x(), twist.vel.y(), twist.vel.z());
 
     // refer to base frame, but leave the reference point intact
     twist = H_0_N_initial.M.Inverse() * twist;
-    ROS_INFO("Twist in base frame: %f %f %f", twist.vel.x(), twist.vel.y(), twist.vel.z());
 
     KDL::JntArray qdot(getJointCount());
 
     if (!checkReturnCode(ikSolverVel->CartToJnt(vectorToKdl(current), twist, qdot)))
     {
-        ROS_WARN("Could not calculate joint velocities (1)");
+        ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "Could not calculate joint velocities (1)");
         return false;
     }
 
@@ -176,7 +171,7 @@ bool tiago_controllers::ArmController::getDesiredJointValues(const ros::Duration
 
     if (!checkReturnCode(ikSolverVel->CartToJnt(q_temp, twist, qdot_temp)))
     {
-        ROS_WARN("Could not calculate joint velocities (2)");
+        ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "Could not calculate joint velocities (2)");
         return false;
     }
 
