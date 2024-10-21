@@ -1,19 +1,22 @@
 #!/usr/bin/env python
 
+import argparse
 import rospy
 import actionlib
 from play_motion_msgs.msg import PlayMotionAction, PlayMotionGoal, PlayMotionResult
 from controller_manager_msgs.srv import ListControllers, SwitchController
 from tiago_telepresence_controllers.srv import ArmMotion, ArmMotionResponse
 
-current_state = "home"
+parser = argparse.ArgumentParser()
+parser.add_argument("--arm", type=str, default=None)
+
+current_state = None
+cs = None
+tp_controllers = None
 
 def pre_switch_controllers():
-  cs = manager_list().controller
-  start_controllers = [c.name for c in cs if c.name in controllers and c.state == "stopped"]
-  stop_controllers = [c.name for c in cs if c.name.endswith("_tp_controller") and
-                                            c.name.replace("_tp_controller", "_controller") in controllers and
-                                            c.state == "running"]
+  start_controllers = [c.name for c in cs if c.name.replace("_controller", "_tp_controller") in tp_controllers and c.state == "stopped"]
+  stop_controllers = [c.name for c in cs if c in tp_controllers and c.state == "running"]
 
   rospy.loginfo("Switching controllers (pre)...")
   rospy.loginfo("Start: %s" % start_controllers)
@@ -27,11 +30,8 @@ def pre_switch_controllers():
     rospy.logfatal("Failed to switch controllers (pre)")
 
 def post_switch_controllers():
-  cs = manager_list().controller
-  start_controllers = [c.name for c in cs if c.name.endswith("_tp_controller") and
-                                             c.name.replace("_tp_controller", "_controller") in controllers and
-                                             c.state == "stopped"]
-  stop_controllers = [c.name for c in cs if c.name in controllers and c.state == "running"]
+  start_controllers = [c.name for c in cs if c in tp_controllers and c.state == "stopped"]
+  stop_controllers = [c.name for c in cs if c.name.replace("_controller", "_tp_controller") in tp_controllers and c.state == "running"]
 
   rospy.loginfo("Switching controllers (post)...")
   rospy.loginfo("Start: %s" % start_controllers)
@@ -81,20 +81,34 @@ def handle_arm_motion(req):
 
 if __name__ == "__main__":
   rospy.init_node("tp_arm_motion")
+
+  args, unknown = parser.parse_known_args()
+
+  if args.arm is not None: # TIAGo++
+    if args.arm not in ["left", "right"]:
+      rospy.logfatal("Invalid argument for --arm: %s" % args.arm)
+      exit(1)
+
+    current_state += "home_" + args.arm
+  else: # TIAGo
+    current_state += "home"
+
   rospy.loginfo("Waiting for play_motion...")
 
-  client = actionlib.SimpleActionClient("play_motion", PlayMotionAction)
+  client = actionlib.SimpleActionClient("/play_motion", PlayMotionAction)
   client.wait_for_server()
   rospy.loginfo("...connected.")
 
-  controllers = rospy.get_param("play_motion/controllers")
+  controllers = rospy.get_param("/play_motion/controllers")
 
-  rospy.wait_for_service("controller_manager/list_controllers")
-  rospy.wait_for_service("controller_manager/switch_controller")
+  rospy.wait_for_service("/controller_manager/list_controllers")
+  rospy.wait_for_service("/controller_manager/switch_controller")
 
-  manager_list = rospy.ServiceProxy("controller_manager/list_controllers", ListControllers)
-  manager_switch = rospy.ServiceProxy("controller_manager/switch_controller", SwitchController)
+  manager_list = rospy.ServiceProxy("/controller_manager/list_controllers", ListControllers)
+  manager_switch = rospy.ServiceProxy("/controller_manager/switch_controller", SwitchController)
 
-  s = rospy.Service("tp_arm_motion/command", ArmMotion, handle_arm_motion)
+  cs = manager_list().controller
+  tp_controllers = [c.name for c in cs if c.name.endswith("_tp_controller")]
+  s = rospy.Service("/tp_arm_motion/command", ArmMotion, handle_arm_motion)
 
   rospy.spin()

@@ -14,11 +14,12 @@ if __name__ == "__main__":
 
   controllers = manager_list()
 
-  start_controllers = ["arm_controller", "gripper_controller", "torso_controller", "head_controller"]
-  stop_controllers = [c.name for c in controllers.controller if c.name.endswith("_tp_controller") and c.state == "running"]
+  cs = manager_list().controller
+  tp_controllers = [c.name for c in cs if c.name.endswith("_tp_controller")]
+  start_controllers = [c.name for c in cs if c.name.replace("_controller", "_tp_controller") in tp_controllers and c.state == "stopped"]
+  stop_controllers = [c.name for c in cs if c in tp_controllers and c.state == "running"]
 
   rospy.loginfo("Switching controllers...")
-
   response = manager_switch(start_controllers=start_controllers,
                             stop_controllers=stop_controllers,
                             strictness=2)

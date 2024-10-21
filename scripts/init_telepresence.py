@@ -1,40 +1,30 @@
 #!/usr/bin/env python
 
 import rospy
-import actionlib
-from play_motion_msgs.msg import PlayMotionAction, PlayMotionGoal
 from sensor_msgs.msg import JointState
-from controller_manager_msgs.srv import SwitchController
+from controller_manager_msgs.srv import ListControllers, SwitchController
 
 if __name__ == "__main__":
   rospy.init_node("init_telepresence")
-  rospy.loginfo("Waiting for play_motion...")
-  client = actionlib.SimpleActionClient("/play_motion", PlayMotionAction)
-  client.wait_for_server()
-  rospy.loginfo("...connected.")
 
   rospy.wait_for_message("/joint_states", JointState)
   rospy.sleep(3.0)
 
-  rospy.loginfo("Tuck arm...")
-  goal = PlayMotionGoal()
-  goal.motion_name = 'home'
-  goal.skip_planning = False
-
-  client.send_goal(goal)
-  client.wait_for_result(rospy.Duration(10.0))
-  rospy.loginfo("Arm tucked.")
-
+  rospy.wait_for_service("/controller_manager/list_controllers")
   rospy.wait_for_service("/controller_manager/switch_controller")
-  manager = rospy.ServiceProxy("/controller_manager/switch_controller", SwitchController)
 
-  start_controllers=["arm_tp_controller", "gripper_tp_controller", "torso_tp_controller", "head_tp_controller"]
-  stop_controllers=["arm_controller", "gripper_controller", "torso_controller", "head_controller"]
+  manager_list = rospy.ServiceProxy("/controller_manager/list_controllers", ListControllers)
+  manager_switch = rospy.ServiceProxy("/controller_manager/switch_controller", SwitchController)
+
+  cs = manager_list().controller
+  tp_controllers = [c.name for c in cs if c.name.endswith("_tp_controller")]
+  start_controllers = [c.name for c in cs if c in tp_controllers and c.state == "stopped"]
+  stop_controllers = [c.name for c in cs if c.name.replace("_controller", "_tp_controller") in tp_controllers and c.state == "running"]
 
   rospy.loginfo("Switching controllers...")
-  response = manager(start_controllers=start_controllers,
-                     stop_controllers=stop_controllers,
-                     strictness=2)
+  response = manager_switch(start_controllers=start_controllers,
+                            stop_controllers=stop_controllers,
+                            strictness=2)
 
   if not response.ok:
     rospy.logfatal("Failed to switch controllers")

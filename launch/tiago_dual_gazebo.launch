@@ -7,8 +7,9 @@
     <arg name="world" default="simple_office_with_people"/>
     <arg name="extra_gazebo_args" default=""/>
 
-    <include file="$(find tiago_gazebo)/launch/tiago_gazebo.launch">
-        <arg name="end_effector" value="pal-gripper"/>
+    <include file="$(find tiago_dual_gazebo)/launch/tiago_dual_gazebo.launch">
+        <arg name="end_effector_left" value="pal-gripper"/>
+        <arg name="end_effector_right" value="pal-gripper"/>
         <arg name="gui" value="true"/>
         <arg name="debug" default="$(arg debug)"/>
         <arg name="public_sim" value="true"/>
@@ -23,6 +24,7 @@
         <arg name="tcp_port" value="$(arg tcp_port)"/>
     </include>
 
-    <include file="$(find tiago_telepresence_controllers)/launch/telepresence_controllers.launch">
+    <include file="$(find tiago_telepresence_controllers)/launch/telepresence_controllers_dual.launch">
+        <arg name="arm" value="right"/>
     </include>
 </launch>
