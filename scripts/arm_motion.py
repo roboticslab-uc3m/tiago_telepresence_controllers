@@ -11,12 +11,13 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--arm", type=str, default=None)
 
 current_state = None
-cs = None
+manager_list = None
 tp_controllers = None
 
 def pre_switch_controllers():
+  cs = manager_list().controller
   start_controllers = [c.name for c in cs if c.name.replace("_controller", "_tp_controller") in tp_controllers and c.state == "stopped"]
-  stop_controllers = [c.name for c in cs if c in tp_controllers and c.state == "running"]
+  stop_controllers = [c.name for c in cs if c.name in tp_controllers and c.state == "running"]
 
   rospy.loginfo("Switching controllers (pre)...")
   rospy.loginfo("Start: %s" % start_controllers)
@@ -30,7 +31,8 @@ def pre_switch_controllers():
     rospy.logfatal("Failed to switch controllers (pre)")
 
 def post_switch_controllers():
-  start_controllers = [c.name for c in cs if c in tp_controllers and c.state == "stopped"]
+  cs = manager_list().controller
+  start_controllers = [c.name for c in cs if c.name in tp_controllers and c.state == "stopped"]
   stop_controllers = [c.name for c in cs if c.name.replace("_controller", "_tp_controller") in tp_controllers and c.state == "running"]
 
   rospy.loginfo("Switching controllers (post)...")
@@ -89,9 +91,9 @@ if __name__ == "__main__":
       rospy.logfatal("Invalid argument for --arm: %s" % args.arm)
       exit(1)
 
-    current_state += "home_" + args.arm
+    current_state = "home_" + args.arm
   else: # TIAGo
-    current_state += "home"
+    current_state = "home"
 
   rospy.loginfo("Waiting for play_motion...")
 
