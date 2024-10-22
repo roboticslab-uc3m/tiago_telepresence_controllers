@@ -136,14 +136,13 @@ bool tiago_controllers::ArmController::getDesiredJointValues(const ros::Duration
         std::lock_guard<std::mutex> lock(mutex);
         H_N.p = KDL::Vector(value.position.x, value.position.y, value.position.z);
         H_N.M = KDL::Rotation::Quaternion(value.orientation.x, value.orientation.y, value.orientation.z, value.orientation.w);
-        H_N.M = KDL::Rotation::Identity();
     }
 
     auto H_0_N_desired = H_0_N_initial * H_N;
     auto twist = KDL::diff(H_0_N_prev, H_0_N_desired, period.toSec());
 
     // refer to base frame, but leave the reference point intact
-    twist = H_0_N_initial.M.Inverse() * twist;
+    twist = H_0_N_initial.M * twist;
 
     KDL::JntArray qdot(getJointCount());
 
