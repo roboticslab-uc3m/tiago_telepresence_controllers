@@ -21,6 +21,7 @@
     <depend>urdf</depend>
     <depend>message_generation</depend>
     <depend>message_runtime</depend>
+    <depend>ros_tcp_endpoint</depend>
 
     <export>
         <controller_interface plugin="${prefix}/tiago_telepresence_controllers_plugins.xml"/>
