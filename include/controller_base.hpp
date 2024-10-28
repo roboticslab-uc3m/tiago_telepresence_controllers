@@ -43,7 +43,6 @@ private:
     bool isActive {false};
     std::vector<hardware_interface::JointHandle> joints;
     std::vector<std::pair<double, double>> jointLimits;
-    std::vector<double> jointAngles;
     double step {0.0};
     ros::Time stamp;
 };
