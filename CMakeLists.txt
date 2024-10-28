@@ -53,8 +53,7 @@ install(DIRECTORY config launch
         DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 )
 
-install(PROGRAMS scripts/init_telepresence.py
-                 scripts/stop_telepresence.py
+install(PROGRAMS scripts/tp_controller_switcher.py
                  scripts/arm_motion.py
         DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
