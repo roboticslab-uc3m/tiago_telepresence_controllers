@@ -22,14 +22,13 @@ protected:
     std::string getName() const { return name; }
     int getJointCount() const { return joints.size(); }
     const std::vector<std::pair<double, double>> & getJointLimits() const { return jointLimits; }
-    virtual bool additionalSetup(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n) { return true; }
+    virtual bool additionalSetup(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n, const std::string &description) { return true; }
     virtual void registerSubscriber(ros::NodeHandle &n, ros::Subscriber &sub) = 0;
     virtual bool getDesiredJointValues(const ros::Duration& period, const std::vector<double> & current, std::vector<double> & desired) = 0;
     void updateStamp();
     virtual void onStarting(const std::vector<double> & angles) {}
     bool isSteppingEnabled() const { return isStepping; }
 
-    std::string robot_desc_string;
     mutable std::mutex mutex;
 
 private:

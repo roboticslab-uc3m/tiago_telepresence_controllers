@@ -59,7 +59,7 @@ public:
     }
 
 protected:
-    bool additionalSetup(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n) override;
+    bool additionalSetup(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n, const std::string &description) override;
     bool getDesiredJointValues(const ros::Duration& period, const std::vector<double> & current, std::vector<double> & desired) override;
 
 private:
@@ -75,11 +75,11 @@ private:
 
 } // namespace tiago_controllers
 
-bool tiago_controllers::ArmController::additionalSetup(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n)
+bool tiago_controllers::ArmController::additionalSetup(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n, const std::string &description)
 {
     KDL::Tree tree;
 
-    if (!kdl_parser::treeFromString(robot_desc_string, tree))
+    if (!kdl_parser::treeFromString(description, tree))
     {
         ROS_ERROR("Failed to construct KDL tree");
         return false;
