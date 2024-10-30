@@ -11,4 +11,7 @@
 
     <include file="$(find tiago_telepresence_controllers)/launch/telepresence_controllers.launch">
     </include>
+
+    <include file="$(find tiago_telepresence_controllers)/launch/telepresence_audio.launch">
+    </include>
 </launch>

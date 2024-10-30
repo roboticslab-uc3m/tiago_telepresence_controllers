@@ -1,0 +1,17 @@
+<launch>
+    <include file="$(find audio_play)/launch/play.launch" ns="audio_out">
+        <arg name="channels" value="1"/>
+        <arg name="do_timestamp" value="false"/>
+        <arg name="format" value="wave"/>
+        <arg name="sample_format" value="S16LE"/>
+        <arg name="sample_rate" value="16000"/>
+    </include>
+
+    <include file="$(find audio_capture)/launch/capture.launch" ns="audio_in">
+        <arg name="channels" value="2"/>
+        <arg name="device" value="hw:1,0"/>
+        <arg name="format" value="wave"/>
+        <arg name="sample_format" value="S16LE"/>
+        <arg name="sample_rate" value="44100"/>
+    </include>
+</launch>

@@ -12,4 +12,7 @@
     <include file="$(find tiago_telepresence_controllers)/launch/telepresence_controllers_dual.launch">
         <arg name="arm" value="right"/>
     </include>
+
+    <include file="$(find tiago_telepresence_controllers)/launch/telepresence_audio.launch">
+    </include>
 </launch>
