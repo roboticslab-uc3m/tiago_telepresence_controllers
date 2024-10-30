@@ -4,18 +4,18 @@ import argparse
 import rospy
 import actionlib
 from play_motion_msgs.msg import PlayMotionAction, PlayMotionGoal, PlayMotionResult
-from controller_manager_msgs.srv import ListControllers, SwitchController
+from controller_manager_msgs.srv import ListControllers, SwitchController, SwitchControllerRequest
 from tiago_telepresence_controllers.srv import ArmMotion, ArmMotionResponse
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--arm", type=str, default=None)
 
 current_state = None
-manager_list = None
-tp_controllers = None
+list_controllers = None
+tp_controllers = []
 
 def pre_switch_controllers():
-  cs = manager_list().controller
+  cs = list_controllers().controller
   start_controllers = [c.name for c in cs if c.name.replace("_controller", "_tp_controller") in tp_controllers and c.state == "stopped"]
   stop_controllers = [c.name for c in cs if c.name in tp_controllers and c.state == "running"]
 
@@ -23,15 +23,15 @@ def pre_switch_controllers():
   rospy.loginfo("Start: %s" % start_controllers)
   rospy.loginfo("Stop: %s" % stop_controllers)
 
-  response = manager_switch(start_controllers=start_controllers,
-                            stop_controllers=stop_controllers,
-                            strictness=2)
+  response = switch_controller(start_controllers=start_controllers,
+                               stop_controllers=stop_controllers,
+                               strictness=SwitchControllerRequest.STRICT)
 
   if not response.ok:
     rospy.logfatal("Failed to switch controllers (pre)")
 
 def post_switch_controllers():
-  cs = manager_list().controller
+  cs = list_controllers().controller
   start_controllers = [c.name for c in cs if c.name in tp_controllers and c.state == "stopped"]
   stop_controllers = [c.name for c in cs if c.name.replace("_controller", "_tp_controller") in tp_controllers and c.state == "running"]
 
@@ -39,9 +39,9 @@ def post_switch_controllers():
   rospy.loginfo("Start: %s" % start_controllers)
   rospy.loginfo("Stop: %s" % stop_controllers)
 
-  response = manager_switch(start_controllers=start_controllers,
-                            stop_controllers=stop_controllers,
-                            strictness=2)
+  response = switch_controller(start_controllers=start_controllers,
+                               stop_controllers=stop_controllers,
+                               strictness=SwitchControllerRequest.STRICT)
 
   if not response.ok:
     rospy.logfatal("Failed to switch controllers (post)")
@@ -52,6 +52,10 @@ def handle_arm_motion(req):
   if req.command == current_state:
     rospy.loginfo("Motion '%s' already completed." % req.command)
     return ArmMotionResponse(success=True)
+
+  if len(tp_controllers) == 0:
+    cs = list_controllers().controller
+    tp_controllers.extend([c.name for c in cs if c.name.endswith("_tp_controller")])
 
   rospy.loginfo("Executing motion: %s", req.command)
 
@@ -106,11 +110,9 @@ if __name__ == "__main__":
   rospy.wait_for_service("/controller_manager/list_controllers")
   rospy.wait_for_service("/controller_manager/switch_controller")
 
-  manager_list = rospy.ServiceProxy("/controller_manager/list_controllers", ListControllers)
-  manager_switch = rospy.ServiceProxy("/controller_manager/switch_controller", SwitchController)
+  list_controllers = rospy.ServiceProxy("/controller_manager/list_controllers", ListControllers)
+  switch_controller = rospy.ServiceProxy("/controller_manager/switch_controller", SwitchController)
 
-  cs = manager_list().controller
-  tp_controllers = [c.name for c in cs if c.name.endswith("_tp_controller")]
   s = rospy.Service("/tp_arm_motion/command", ArmMotion, handle_arm_motion)
 
   rospy.spin()
