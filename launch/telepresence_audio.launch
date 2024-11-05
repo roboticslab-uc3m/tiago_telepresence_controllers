@@ -11,7 +11,7 @@
     <include file="$(find audio_capture)/launch/capture.launch">
         <arg name="channels" value="2"/>
         <arg name="device" value="hw:1,0"/>
-        <arg name="format" value="wave"/>
+        <arg name="format" value="mp3"/>
         <arg name="sample_format" value="S16LE"/>
         <arg name="sample_rate" value="44100"/>
         <arg name="ns" value="audio_in"/>
