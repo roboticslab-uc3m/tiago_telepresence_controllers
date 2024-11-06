@@ -14,22 +14,17 @@ namespace tiago_controllers
 class ControllerBase : public controller_interface::Controller<hardware_interface::PositionJointInterface>
 {
 public:
-    ControllerBase(const std::string &_name, bool _isStepping) : name(_name), isStepping(_isStepping) {}
+    ControllerBase(const std::string &_name) : name(_name) {}
     bool init(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n) final override;
     void update(const ros::Time& time, const ros::Duration& period) final override;
 
 protected:
-    std::string getName() const { return name; }
-    int getJointCount() const { return joints.size(); }
     const std::vector<std::pair<double, double>> & getJointLimits() const { return jointLimits; }
     virtual bool additionalSetup(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n, const std::string &description) { return true; }
     virtual void registerSubscriber(ros::NodeHandle &n, ros::Subscriber &sub) = 0;
-    virtual bool getDesiredJointValues(const ros::Duration& period, const std::vector<double> & current, std::vector<double> & desired) = 0;
-    void updateStamp();
+    virtual std::vector<double> getDesiredJointValues(const std::vector<double> & current) = 0;
     virtual void onStarting(const std::vector<double> & angles) {}
-    bool isSteppingEnabled() const { return isStepping; }
-
-    mutable std::mutex mutex;
+    void updateStamp();
 
 private:
     void registerPublisher(ros::NodeHandle &n, ros::Publisher &pub);
@@ -38,12 +33,12 @@ private:
     ros::Subscriber sub;
     ros::Publisher pub;
     std::string name;
-    bool isStepping {false};
     bool isActive {false};
     std::vector<hardware_interface::JointHandle> joints;
     std::vector<std::pair<double, double>> jointLimits;
-    double step {0.0};
     ros::Time stamp;
+
+    mutable std::mutex stampMutex;
 };
 
 } // namespace tiago_controllers

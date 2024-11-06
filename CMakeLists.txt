@@ -39,6 +39,7 @@ add_library(${PROJECT_NAME} src/controller_base.cpp
                             src/torso_tp_controller.cpp
                             src/gripper_tp_controller.cpp
                             src/arm_tp_controller.cpp
+                            src/command_buffer.cpp
 )
 
 target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES} ${orocos_kdl_LIBRARIES})

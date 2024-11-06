@@ -7,23 +7,18 @@
 namespace tiago_controllers
 {
 
-class HeadController : public GenericController<geometry_msgs::Quaternion>
+class HeadController : public BufferedGenericController<geometry_msgs::Quaternion>
 {
 public:
-    HeadController() : GenericController("head", false) { }
+    HeadController() : BufferedGenericController("head") { }
 
 protected:
-    bool getDesiredJointValues(const ros::Duration& period, const std::vector<double> & current, std::vector<double> & desired) override
+    void processData(const geometry_msgs::Quaternion& msg) override
     {
-        mutex.lock();
-        auto rot = KDL::Rotation::Quaternion(value.x, value.y, value.z, value.w);
-        mutex.unlock();
-
+        auto rot = KDL::Rotation::Quaternion(msg.x, msg.y, msg.z, msg.w);
         double alfa, beta, gamma;
         rot.GetEulerZYX(alfa, beta, gamma);
-        desired = {-beta, -gamma};
-
-        return true;
+        accept({-beta, -gamma});
     }
 };
 

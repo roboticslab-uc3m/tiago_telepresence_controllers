@@ -6,18 +6,16 @@
 namespace tiago_controllers
 {
 
-class GripperController : public GenericController<std_msgs::Int32>
+class GripperController : public StepperGenericController<std_msgs::Int32>
 {
 public:
-    GripperController() : GenericController("gripper", true) { }
+    GripperController() : StepperGenericController("gripper") { }
 
 protected:
-    bool getDesiredJointValues(const ros::Duration& period, const std::vector<double> & current, std::vector<double> & desired) override
+    void processData(const std_msgs::Int32& msg) override
     {
-        std::lock_guard<std::mutex> lock(mutex);
-        const auto v = static_cast<double>(value.data);
-        desired = {v, v};
-        return true;
+        const auto value = static_cast<double>(msg.data);
+        accept({value, value});
     }
 };
 

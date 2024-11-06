@@ -12,7 +12,6 @@
 #include <kdl/tree.hpp>
 
 constexpr auto UPDATE_LOG_THROTTLE = 1.0; // [s]
-constexpr auto TIMEOUT = 1.0; // [s]
 
 namespace
 {
@@ -39,10 +38,10 @@ namespace
 namespace tiago_controllers
 {
 
-class ArmController : public GenericController<geometry_msgs::Pose>
+class ArmController : public BufferedGenericController<geometry_msgs::Pose>
 {
 public:
-    ArmController() : GenericController("arm", false) { }
+    ArmController() : BufferedGenericController("arm") { }
 
     ~ArmController()
     {
@@ -56,14 +55,15 @@ public:
         fkSolverPos->JntToCart(q, H_0_N_initial);
         ROS_INFO("Initial position: %f %f %f", H_0_N_initial.p.x(), H_0_N_initial.p.y(), H_0_N_initial.p.z());
         H_0_N_prev = H_0_N_initial;
+        BufferedGenericController::onStarting(angles);
     }
 
 protected:
+    void processData(const geometry_msgs::Pose& msg) override;
     bool additionalSetup(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n, const std::string &description) override;
-    bool getDesiredJointValues(const ros::Duration& period, const std::vector<double> & current, std::vector<double> & desired) override;
 
 private:
-    bool checkReturnCode(int ret);
+    static bool checkReturnCode(int ret);
 
     KDL::Chain chain;
     KDL::ChainFkSolverPos_recursive * fkSolverPos {nullptr};
@@ -128,41 +128,49 @@ bool tiago_controllers::ArmController::additionalSetup(hardware_interface::Posit
     return true;
 }
 
-bool tiago_controllers::ArmController::getDesiredJointValues(const ros::Duration& period, const std::vector<double> & current, std::vector<double> & desired)
+void tiago_controllers::ArmController::processData(const geometry_msgs::Pose& msg)
 {
-    KDL::Frame H_N; // change in pose between initial and desired, referred to the TCP
+    const auto period = getCommandPeriod();
 
+    if (period == 0.0)
     {
-        std::lock_guard<std::mutex> lock(mutex);
-        H_N.p = KDL::Vector(value.position.x, value.position.y, value.position.z);
-        H_N.M = KDL::Rotation::Quaternion(value.orientation.x, value.orientation.y, value.orientation.z, value.orientation.w);
+        accept(kdlToVector(q));
+        return;
     }
 
+    // change in pose between initial and desired, referred to the TCP
+    KDL::Frame H_N(
+        KDL::Rotation::Quaternion(msg.orientation.x, msg.orientation.y, msg.orientation.z, msg.orientation.w),
+        KDL::Vector(msg.position.x, msg.position.y, msg.position.z)
+    );
+
     auto H_0_N_desired = H_0_N_initial * H_N;
-    auto twist = KDL::diff(H_0_N_prev, H_0_N_desired, period.toSec());
+    auto twist = KDL::diff(H_0_N_prev, H_0_N_desired, period);
 
     // refer to base frame, but leave the reference point intact
     twist = H_0_N_initial.M * twist;
 
-    KDL::JntArray qdot(getJointCount());
+    KDL::JntArray qdot(q.rows());
 
-    if (!checkReturnCode(ikSolverVel->CartToJnt(vectorToKdl(current), twist, qdot)))
+    if (!checkReturnCode(ikSolverVel->CartToJnt(q, twist, qdot)))
     {
         ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "Could not calculate joint velocities (1)");
-        return false;
+        accept(kdlToVector(q));
+        return;
     }
 
     const auto & limits = getJointLimits();
     auto q_temp = q;
 
-    for (int i = 0; i < getJointCount(); i++)
+    for (int i = 0; i < q_temp.rows(); i++)
     {
-        q_temp(i) += qdot(i) * period.toSec();
+        q_temp(i) += qdot(i) * period;
 
         if (q_temp(i) < limits[i].first || q_temp(i) > limits[i].second)
         {
             ROS_WARN("Joint %d out of limits: %f not in [%f, %f]", i, q_temp(i), limits[i].first, limits[i].second);
-            return false;
+            accept(kdlToVector(q));
+            return;
         }
     }
 
@@ -171,15 +179,15 @@ bool tiago_controllers::ArmController::getDesiredJointValues(const ros::Duration
     if (!checkReturnCode(ikSolverVel->CartToJnt(q_temp, twist, qdot_temp)))
     {
         ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "Could not calculate joint velocities (2)");
-        return false;
+        accept(kdlToVector(q));
+        return;
     }
 
     // no singular point, so update the calculated pose and joint values
     H_0_N_prev = H_0_N_desired;
     q = q_temp;
 
-    desired = kdlToVector(q);
-    return true;
+    accept(kdlToVector(q));
 }
 
 bool tiago_controllers::ArmController::checkReturnCode(int ret)

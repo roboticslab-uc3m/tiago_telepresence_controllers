@@ -36,12 +36,6 @@ bool ControllerBase::init(hardware_interface::PositionJointInterface* hw, ros::N
         return false;
     }
 
-    if (isStepping && !n.getParam("step", step))
-    {
-        ROS_ERROR("Could not retrieve step");
-        return false;
-    }
-
     for (const auto & joint_name : joint_names)
     {
         const auto & joint = model.getJoint(joint_name);
@@ -80,13 +74,13 @@ void ControllerBase::registerPublisher(ros::NodeHandle &n, ros::Publisher &pub)
 
 void ControllerBase::updateStamp()
 {
-    // callers must lock mutex
+    std::lock_guard<std::mutex> lock(stampMutex);
     stamp = ros::Time::now();
 }
 
 ros::Time ControllerBase::getLastStamp() const
 {
-    std::lock_guard<std::mutex> lock(mutex);
+    std::lock_guard<std::mutex> lock(stampMutex);
     return stamp;
 }
 
@@ -118,17 +112,13 @@ void ControllerBase::update(const ros::Time& time, const ros::Duration& period)
 
     isActive = true;
 
-    std::vector<double> desired;
+    const auto desired = getDesiredJointValues(current);
 
-    if (getDesiredJointValues(period, current, desired) && desired.size() == joints.size())
+    for (int i = 0; i < joints.size(); i++)
     {
-        for (int i = 0; i < joints.size(); i++)
-        {
-            const auto & limits = jointLimits[i];
-            const auto target = isStepping ? (msg.data[i] + step * desired[i]) : desired[i];
-            const auto cmd = std::max(limits.first, std::min(limits.second, target));
+        const auto & limits = jointLimits[i];
+        const auto cmd = std::max(limits.first, std::min(limits.second, desired[i]));
 
-            joints[i].setCommand(cmd);
-        }
+        joints[i].setCommand(cmd);
     }
 }

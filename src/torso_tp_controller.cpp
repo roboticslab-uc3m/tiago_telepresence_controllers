@@ -6,18 +6,15 @@
 namespace tiago_controllers
 {
 
-class TorsoController : public GenericController<std_msgs::Int32>
+class TorsoController : public StepperGenericController<std_msgs::Int32>
 {
 public:
-    TorsoController() : GenericController("torso", true) { }
+    TorsoController() : StepperGenericController("torso") { }
 
 protected:
-    bool getDesiredJointValues(const ros::Duration& period, const std::vector<double> & current, std::vector<double> & desired) override
+    void processData(const std_msgs::Int32& msg) override
     {
-        std::lock_guard<std::mutex> lock(mutex);
-        const auto v = static_cast<double>(value.data);
-        desired = {v};
-        return true;
+        accept({static_cast<double>(msg.data)});
     }
 };
 
