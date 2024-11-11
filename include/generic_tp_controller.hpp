@@ -55,7 +55,7 @@ protected:
     {
         std::lock_guard<std::mutex> lock(bufferMutex);
         const auto period = buffer.getCommandPeriod();
-        return period.sec + period.nsec * 10e-9;
+        return period.toSec();
     }
 
 private:

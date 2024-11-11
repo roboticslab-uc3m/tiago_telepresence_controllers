@@ -32,7 +32,7 @@ std::vector<double> CommandBuffer::interpolate()
         // note that `interpolationTimestamp` is equal to the `now` value of the previous iteration,
         // hence the reaching of `storedCommand` will be delayed (resulting in a softer slope)
         const auto dt = nextExpectedCommandTimestamp - interpolationTimestamp;
-        const auto factor = (interpolationPeriod.sec + interpolationPeriod.nsec * 10e-9) / (dt.sec + dt.nsec * 10e-9);
+        const auto factor = interpolationPeriod.toSec() / dt.toSec();
 
         interpolationResult.resize(storedCommand.size());
 
