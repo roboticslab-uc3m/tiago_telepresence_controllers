@@ -25,6 +25,7 @@ protected:
     virtual std::vector<double> getDesiredJointValues(const std::vector<double> & current) = 0;
     virtual void onStarting(const std::vector<double> & angles) {}
     void updateStamp();
+    int numJoints() const { return joints.size(); }
 
 private:
     void registerPublisher(ros::NodeHandle &n, ros::Publisher &pub);

@@ -1,7 +1,7 @@
 #include "generic_tp_controller.hpp"
 
 #include <pluginlib/class_list_macros.h>
-#include <geometry_msgs/Pose.h>
+#include <geometry_msgs/PoseStamped.h>
 
 #include <kdl_parser/kdl_parser.hpp>
 #include <kdl/chain.hpp>
@@ -38,7 +38,7 @@ namespace
 namespace tiago_controllers
 {
 
-class ArmController : public BufferedGenericController<geometry_msgs::Pose>
+class ArmController : public BufferedGenericController<geometry_msgs::PoseStamped>
 {
 public:
     ArmController() : BufferedGenericController("arm") { }
@@ -59,7 +59,7 @@ public:
     }
 
 protected:
-    void processData(const geometry_msgs::Pose& msg) override;
+    void processData(const geometry_msgs::PoseStamped& msg) override;
     bool additionalSetup(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n, const std::string &description) override;
 
 private:
@@ -125,23 +125,23 @@ bool tiago_controllers::ArmController::additionalSetup(hardware_interface::Posit
     fkSolverPos = new KDL::ChainFkSolverPos_recursive(chain);
     ikSolverVel = new KDL::ChainIkSolverVel_pinv(chain, eps, maxIter);
 
-    return true;
+    return BufferedGenericController::additionalSetup(hw, n, description);
 }
 
-void tiago_controllers::ArmController::processData(const geometry_msgs::Pose& msg)
+void tiago_controllers::ArmController::processData(const geometry_msgs::PoseStamped& msg)
 {
     const auto period = getCommandPeriod();
 
     if (period == 0.0)
     {
-        accept(kdlToVector(q));
+        accept(kdlToVector(q), msg.header.stamp);
         return;
     }
 
     // change in pose between initial and desired, referred to the TCP
     KDL::Frame H_N(
-        KDL::Rotation::Quaternion(msg.orientation.x, msg.orientation.y, msg.orientation.z, msg.orientation.w),
-        KDL::Vector(msg.position.x, msg.position.y, msg.position.z)
+        KDL::Rotation::Quaternion(msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w),
+        KDL::Vector(msg.pose.position.x, msg.pose.position.y, msg.pose.position.z)
     );
 
     auto H_0_N_desired = H_0_N_initial * H_N;
@@ -155,7 +155,7 @@ void tiago_controllers::ArmController::processData(const geometry_msgs::Pose& ms
     if (!checkReturnCode(ikSolverVel->CartToJnt(q, twist, qdot)))
     {
         ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "Could not calculate joint velocities (1)");
-        accept(kdlToVector(q));
+        accept(kdlToVector(q), msg.header.stamp);
         return;
     }
 
@@ -169,7 +169,7 @@ void tiago_controllers::ArmController::processData(const geometry_msgs::Pose& ms
         if (q_temp(i) < limits[i].first || q_temp(i) > limits[i].second)
         {
             ROS_WARN("Joint %d out of limits: %f not in [%f, %f]", i, q_temp(i), limits[i].first, limits[i].second);
-            accept(kdlToVector(q));
+            accept(kdlToVector(q), msg.header.stamp);
             return;
         }
     }
@@ -179,7 +179,7 @@ void tiago_controllers::ArmController::processData(const geometry_msgs::Pose& ms
     if (!checkReturnCode(ikSolverVel->CartToJnt(q_temp, twist, qdot_temp)))
     {
         ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "Could not calculate joint velocities (2)");
-        accept(kdlToVector(q));
+        accept(kdlToVector(q), msg.header.stamp);
         return;
     }
 
@@ -187,7 +187,7 @@ void tiago_controllers::ArmController::processData(const geometry_msgs::Pose& ms
     H_0_N_prev = H_0_N_desired;
     q = q_temp;
 
-    accept(kdlToVector(q));
+    accept(kdlToVector(q), msg.header.stamp);
 }
 
 bool tiago_controllers::ArmController::checkReturnCode(int ret)

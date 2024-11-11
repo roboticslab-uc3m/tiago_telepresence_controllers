@@ -22,7 +22,6 @@ protected:
     }
 
     virtual void processData(const T& msg) = 0;
-    virtual void accept(const std::vector<double> & command) = 0;
 
 private:
     void callback(const typename T::ConstPtr& msg)
@@ -37,24 +36,39 @@ class BufferedGenericController : public GenericController<T>
 {
 public:
     using GenericController<T>::GenericController;
+    virtual ~BufferedGenericController() { delete buffer; }
 
 protected:
+    bool additionalSetup(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n, const std::string &description)
+    {
+        int bufferMinSize;
+
+        if (!n.getParam("buffer_min_size", bufferMinSize) || bufferMinSize <= 0)
+        {
+            ROS_ERROR("Could not retrieve buffer_min_size or not greater than 0");
+            return false;
+        }
+
+        buffer = new CommandBuffer(bufferMinSize, GenericController<T>::numJoints());
+        return true;
+    }
+
     void onStarting(const std::vector<double> & angles) override
     {
         std::lock_guard<std::mutex> lock(bufferMutex);
-        buffer.reset(angles);
+        buffer->reset(angles);
     }
 
-    void accept(const std::vector<double> & command) override final
+    void accept(const std::vector<double> & command, const ros::Time & timestamp)
     {
         std::lock_guard<std::mutex> lock(bufferMutex);
-        buffer.accept(command);
+        buffer->accept(command, timestamp);
     }
 
     double getCommandPeriod() const
     {
         std::lock_guard<std::mutex> lock(bufferMutex);
-        const auto period = buffer.getCommandPeriod();
+        const auto period = buffer->getCommandPeriod();
         return period.toSec();
     }
 
@@ -62,10 +76,10 @@ private:
     std::vector<double> getDesiredJointValues(const std::vector<double> & current) override final
     {
         std::lock_guard<std::mutex> lock(bufferMutex);
-        return buffer.interpolate();
+        return buffer->interpolate();
     }
 
-    CommandBuffer buffer;
+    CommandBuffer * buffer {nullptr};
     mutable std::mutex bufferMutex;
 };
 
@@ -87,7 +101,7 @@ protected:
         return true;
     }
 
-    void accept(const std::vector<double> & command) override final
+    void accept(const std::vector<double> & command)
     {
         std::lock_guard<std::mutex> lock(storageMutex);
         stored = command;

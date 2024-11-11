@@ -1,78 +1,117 @@
 #include "command_buffer.hpp"
 
-const ros::Duration CommandBuffer::COMMAND_TIMEOUT = ros::Duration(1.0); // seconds
+#include <iterator> // std::advance, std::distance
+
+constexpr auto CAPACITY_MULTIPLIER = 2.0;
 
 // -----------------------------------------------------------------------------
 
-void CommandBuffer::accept(const std::vector<double> & command)
+void CommandBuffer::accept(const std::vector<double> & command, const ros::Time & timestamp)
 {
-    const auto now = ros::Time::now();
-    commandPeriod = now - commandTimestamp;
-    commandTimestamp = now;
-    storedCommand = command;
+    buffer.emplace_back(command, timestamp);
+
+    if (buffer.size() > minSize * CAPACITY_MULTIPLIER)
+    {
+        buffer.pop_front();
+
+        if (!enabled)
+        {
+            left = right = buffer.begin();
+            std::advance(left, static_cast<int>(minSize * CAPACITY_MULTIPLIER / 2));
+            std::advance(right, std::distance(buffer.begin(), left) + 1);
+            updateSlopes();
+            offset = ros::Time::now() - left->second;
+            enabled = true;
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+
+void CommandBuffer::updateSlopes()
+{
+    const auto dt = (right->second - left->second).toSec();
+
+    for (auto i = 0; i < slopes.size(); i++)
+    {
+        slopes[i] = (right->first[i] - left->first[i]) / dt;
+    }
 }
 
 // -----------------------------------------------------------------------------
 
 std::vector<double> CommandBuffer::interpolate()
 {
-    const auto now = ros::Time::now();
-    const auto nextExpectedCommandTimestamp = commandTimestamp + commandPeriod;
-    const auto interpolationPeriod = now - interpolationTimestamp;
+    const auto refTime = ros::Time::now() - offset;
 
-    if (now > nextExpectedCommandTimestamp || commandPeriod > COMMAND_TIMEOUT)
+    if (enabled && !buffer.empty() && left->second <= refTime)
     {
-        // cond. 1: the next command was skipped, it didn't arrive on time or none was received yet
-        // cond. 2: the last command was received too long ago, perhaps it was a single step command?
-        // in either case, we don't interpolate and just process the last received command (again)
-        interpolationResult = storedCommand;
-    }
-    else
-    {
-        // note that `interpolationTimestamp` is equal to the `now` value of the previous iteration,
-        // hence the reaching of `storedCommand` will be delayed (resulting in a softer slope)
-        const auto dt = nextExpectedCommandTimestamp - interpolationTimestamp;
-        const auto factor = interpolationPeriod.toSec() / dt.toSec();
+        bool needsUpdate = false;
 
-        interpolationResult.resize(storedCommand.size());
-
-        for (size_t i = 0; i < storedCommand.size(); i++)
+        while (right->second < refTime && right != buffer.end())
         {
-            // having y = f(t): f(t+T) = f(t) + T * (delta_y / delta_t)
-            interpolationResult[i] += factor * (storedCommand[i] - interpolationResult[i]);
+            std::advance(left, 1);
+            std::advance(right, 1);
+            needsUpdate = true;
+        }
+
+        if (right != buffer.end())
+        {
+            if (needsUpdate)
+            {
+                updateSlopes();
+            }
+
+            const auto T = (refTime - left->second).toSec();
+            auto out = left->first;
+
+            for (size_t i = 0; i < slopes.size(); i++)
+            {
+                // having y = f(t): f(t+T) = f(t) + T * (delta_y / delta_t)
+                out[i] += T * slopes[i];
+            }
+
+            return out;
+        }
+        else
+        {
+            right = left;
         }
     }
 
-    interpolationTimestamp = now;
-    return interpolationResult;
-}
-
-// -----------------------------------------------------------------------------
-
-std::vector<double> CommandBuffer::getStoredCommand(ros::Time * timestamp) const
-{
-    if (timestamp)
+    if (enabled)
     {
-        *timestamp = commandTimestamp;
+        enabled = false;
+
+        if (left->second <= refTime)
+        {
+            buffer.resize(minSize, std::make_pair(left->first, left->second));
+        }
+        else
+        {
+            buffer.resize(minSize, std::make_pair(right->first, right->second));
+        }
     }
 
-    return storedCommand;
+    return right->first;
 }
 
 // -----------------------------------------------------------------------------
 
 ros::Duration CommandBuffer::getCommandPeriod() const
 {
-    return commandPeriod;
+    return !buffer.empty() ? right->second - left->second : ros::Duration(0.0);
 }
 
 // -----------------------------------------------------------------------------
 
 void CommandBuffer::reset(const std::vector<double> & initialCommand)
 {
-    storedCommand = interpolationResult = initialCommand;
-    commandPeriod = ros::Duration();
-    commandTimestamp = interpolationTimestamp = ros::Time::now();
+    offset.fromSec(0.0);
+    buffer.resize(minSize, std::make_pair(initialCommand, ros::Time::now()));
+    slopes.resize(initialCommand.size(), 0.0);
+    left = right = buffer.begin();
+    enabled = false;
 }
 
 // -----------------------------------------------------------------------------
