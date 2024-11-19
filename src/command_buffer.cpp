@@ -2,7 +2,7 @@
 
 #include <iterator> // std::advance, std::distance
 
-constexpr auto CAPACITY_MULTIPLIER = 2.0;
+constexpr auto CAPACITY_MULTIPLIER = 5;
 
 // -----------------------------------------------------------------------------
 
@@ -10,15 +10,24 @@ void CommandBuffer::accept(const std::vector<double> & command, const ros::Time 
 {
     buffer.emplace_back(command, timestamp);
 
-    if (buffer.size() > minSize * CAPACITY_MULTIPLIER)
+    if (buffer.size() > minSize  * (CAPACITY_MULTIPLIER + 1))
     {
+        if (left == buffer.begin())
+        {
+            // undesirable, but we need to keep our iterators valid
+            std::advance(left, 1);
+            std::advance(right, 1);
+        }
+
         buffer.pop_front();
 
         if (!enabled)
         {
-            left = right = buffer.begin();
-            std::advance(left, static_cast<int>(minSize * CAPACITY_MULTIPLIER / 2));
-            std::advance(right, std::distance(buffer.begin(), left) + 1);
+            if (left == right)
+            {
+                std::advance(right, 1);
+            }
+
             updateSlopes();
             offset = ros::Time::now() - left->second;
             enabled = true;
@@ -34,7 +43,7 @@ void CommandBuffer::updateSlopes()
 
     for (auto i = 0; i < slopes.size(); i++)
     {
-        slopes[i] = (right->first[i] - left->first[i]) / dt;
+        slopes[i] = dt != 0.0 ? (right->first[i] - left->first[i]) / dt : 0.0;
     }
 }
 
@@ -65,7 +74,7 @@ std::vector<double> CommandBuffer::interpolate()
             const auto T = (refTime - left->second).toSec();
             auto out = left->first;
 
-            for (size_t i = 0; i < slopes.size(); i++)
+            for (auto i = 0; i < slopes.size(); i++)
             {
                 // having y = f(t): f(t+T) = f(t) + T * (delta_y / delta_t)
                 out[i] += T * slopes[i];
@@ -79,19 +88,7 @@ std::vector<double> CommandBuffer::interpolate()
         }
     }
 
-    if (enabled)
-    {
-        enabled = false;
-
-        if (left->second <= refTime)
-        {
-            buffer.resize(minSize, std::make_pair(left->first, left->second));
-        }
-        else
-        {
-            buffer.resize(minSize, std::make_pair(right->first, right->second));
-        }
-    }
+    enabled = false;
 
     return right->first;
 }
@@ -108,9 +105,11 @@ ros::Duration CommandBuffer::getCommandPeriod() const
 void CommandBuffer::reset(const std::vector<double> & initialCommand)
 {
     offset.fromSec(0.0);
-    buffer.resize(minSize, std::make_pair(initialCommand, ros::Time::now()));
+    buffer.resize(minSize * CAPACITY_MULTIPLIER, std::make_pair(initialCommand, ros::Time::now()));
     slopes.resize(initialCommand.size(), 0.0);
-    left = right = buffer.begin();
+    left = right = buffer.end();
+    std::advance(left, -1);
+    std::advance(right, -1);
     enabled = false;
 }
 
