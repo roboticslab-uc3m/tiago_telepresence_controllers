@@ -10,7 +10,7 @@ void CommandBuffer::accept(const std::vector<double> & command, const ros::Time 
 {
     buffer.emplace_back(command, timestamp);
 
-    if (buffer.size() > minSize  * (CAPACITY_MULTIPLIER + 1))
+    if (buffer.size() > minSize * (CAPACITY_MULTIPLIER + 1))
     {
         if (left == buffer.begin())
         {
@@ -105,11 +105,17 @@ ros::Duration CommandBuffer::getCommandPeriod() const
 void CommandBuffer::reset(const std::vector<double> & initialCommand)
 {
     offset.fromSec(0.0);
+
+    buffer.clear();
+    slopes.clear();
+
     buffer.resize(minSize * CAPACITY_MULTIPLIER, std::make_pair(initialCommand, ros::Time::now()));
     slopes.resize(initialCommand.size(), 0.0);
+
     left = right = buffer.end();
     std::advance(left, -1);
     std::advance(right, -1);
+
     enabled = false;
 }
 
