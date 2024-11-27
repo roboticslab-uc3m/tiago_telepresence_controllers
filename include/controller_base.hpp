@@ -24,6 +24,7 @@ protected:
     virtual void registerSubscriber(ros::NodeHandle &n, ros::Subscriber &sub) = 0;
     virtual std::vector<double> getDesiredJointValues(const std::vector<double> & current) = 0;
     virtual void onStarting(const std::vector<double> & angles) {}
+    virtual void onDisabling() {}
     void updateStamp();
     int numJoints() const { return joints.size(); }
     const std::string & getName() const { return name; }

@@ -1,5 +1,7 @@
 #include "generic_tp_controller.hpp"
 
+#include <atomic>
+
 #include <pluginlib/class_list_macros.h>
 #include <geometry_msgs/PoseStamped.h>
 
@@ -56,6 +58,12 @@ public:
         ROS_INFO("[%s] Initial position: %f %f %f", getName().c_str(), H_0_N_initial.p.x(), H_0_N_initial.p.y(), H_0_N_initial.p.z());
         H_0_N_prev = H_0_N_initial;
         BufferedGenericController::onStarting(angles);
+        active = true;
+    }
+
+    void onDisabling() override
+    {
+        active = false;
     }
 
 protected:
@@ -71,6 +79,8 @@ private:
     KDL::Frame H_0_N_initial;
     KDL::Frame H_0_N_prev;
     KDL::JntArray q;
+
+    std::atomic_bool active {false};
 };
 
 } // namespace tiago_controllers
@@ -130,6 +140,11 @@ bool tiago_controllers::ArmController::additionalSetup(hardware_interface::Posit
 
 void tiago_controllers::ArmController::processData(const geometry_msgs::PoseStamped& msg)
 {
+    if (!active)
+    {
+        return;
+    }
+
     const auto period = getCommandPeriod();
 
     if (period == 0.0)

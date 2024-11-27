@@ -103,6 +103,7 @@ void ControllerBase::update(const ros::Time& time, const ros::Duration& period)
     if (time - getLastStamp() > timeout)
     {
         isActive = false;
+        onDisabling();
         return;
     }
     else if (!isActive)
