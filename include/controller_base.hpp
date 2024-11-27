@@ -26,6 +26,7 @@ protected:
     virtual void onStarting(const std::vector<double> & angles) {}
     void updateStamp();
     int numJoints() const { return joints.size(); }
+    const std::string & getName() const { return name; }
 
 private:
     void registerPublisher(ros::NodeHandle &n, ros::Publisher &pub);

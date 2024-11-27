@@ -15,7 +15,7 @@ public:
 protected:
     void processData(const geometry_msgs::QuaternionStamped& msg) override
     {
-        auto rot = KDL::Rotation::Quaternion(msg.quaternion.x, msg.quaternion.y, msg.quaternion.z, msg.quaternion.w);
+        const auto rot = KDL::Rotation::Quaternion(msg.quaternion.x, msg.quaternion.y, msg.quaternion.z, msg.quaternion.w);
         double alfa, beta, gamma;
         rot.GetEulerZYX(alfa, beta, gamma);
         accept({-beta, -gamma}, msg.header.stamp);
