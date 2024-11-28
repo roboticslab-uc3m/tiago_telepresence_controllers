@@ -102,16 +102,19 @@ void ControllerBase::update(const ros::Time& time, const ros::Duration& period)
 
     if (time - getLastStamp() > timeout)
     {
-        isActive = false;
-        onDisabling();
+        if (isActive)
+        {
+            isActive = false;
+            onDisabling();
+        }
+
         return;
     }
     else if (!isActive)
     {
+        isActive = true;
         onStarting(current);
     }
-
-    isActive = true;
 
     const auto desired = getDesiredJointValues(current);
 
