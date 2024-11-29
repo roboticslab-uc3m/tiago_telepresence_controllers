@@ -10,20 +10,20 @@ class CommandBuffer
 {
 public:
     CommandBuffer(int minSize, int cmdSize) : minSize(minSize), slopes(cmdSize, 0.0) { }
-    void accept(const std::vector<double> & command, const ros::Time & timestamp);
+    void accept(const std::vector<double> & command, const ros::SteadyTime & timestamp);
     std::vector<double> interpolate();
-    ros::Duration getCommandPeriod() const;
+    ros::WallDuration getCommandPeriod() const;
     void reset(const std::vector<double> & initialCommand);
 
 private:
     void updateSlopes();
 
     const int minSize {0};
-    std::list<std::pair<std::vector<double>, ros::Time>> buffer;
+    std::list<std::pair<std::vector<double>, ros::SteadyTime>> buffer;
     decltype(buffer)::iterator left;
     decltype(buffer)::iterator right;
     std::vector<double> slopes;
-    ros::Duration offset;
+    ros::WallDuration offset;
     bool enabled {false};
 };
 

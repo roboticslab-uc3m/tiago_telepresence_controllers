@@ -1,12 +1,12 @@
 #include "command_buffer.hpp"
 
-#include <iterator> // std::advance, std::distance
+#include <iterator> // std::advance
 
 constexpr auto CAPACITY_MULTIPLIER = 5;
 
 // -----------------------------------------------------------------------------
 
-void CommandBuffer::accept(const std::vector<double> & command, const ros::Time & timestamp)
+void CommandBuffer::accept(const std::vector<double> & command, const ros::SteadyTime & timestamp)
 {
     buffer.emplace_back(command, timestamp);
 
@@ -26,10 +26,11 @@ void CommandBuffer::accept(const std::vector<double> & command, const ros::Time 
             if (left == right)
             {
                 std::advance(right, 1);
+                left->second = right->second;
             }
 
             updateSlopes();
-            offset = ros::Time::now() - left->second;
+            offset = ros::SteadyTime::now() - left->second;
             enabled = true;
         }
     }
@@ -51,7 +52,7 @@ void CommandBuffer::updateSlopes()
 
 std::vector<double> CommandBuffer::interpolate()
 {
-    const auto refTime = ros::Time::now() - offset;
+    const auto refTime = ros::SteadyTime::now() - offset;
 
     if (enabled && !buffer.empty() && left->second <= refTime)
     {
@@ -95,9 +96,9 @@ std::vector<double> CommandBuffer::interpolate()
 
 // -----------------------------------------------------------------------------
 
-ros::Duration CommandBuffer::getCommandPeriod() const
+ros::WallDuration CommandBuffer::getCommandPeriod() const
 {
-    return !buffer.empty() ? right->second - left->second : ros::Duration(0.0);
+    return !buffer.empty() ? right->second - left->second : ros::WallDuration(0.0);
 }
 
 // -----------------------------------------------------------------------------
@@ -109,7 +110,7 @@ void CommandBuffer::reset(const std::vector<double> & initialCommand)
     buffer.clear();
     slopes.clear();
 
-    buffer.resize(minSize * CAPACITY_MULTIPLIER, std::make_pair(initialCommand, ros::Time::now()));
+    buffer.resize(minSize * CAPACITY_MULTIPLIER, std::make_pair(initialCommand, ros::SteadyTime(0.0)));
     slopes.resize(initialCommand.size(), 0.0);
 
     left = right = buffer.end();

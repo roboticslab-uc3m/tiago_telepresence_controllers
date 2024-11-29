@@ -61,8 +61,9 @@ protected:
 
     void accept(const std::vector<double> & command, const ros::Time & timestamp)
     {
+        auto steady = ros::SteadyTime(timestamp.toSec());
         std::lock_guard<std::mutex> lock(bufferMutex);
-        buffer->accept(command, timestamp);
+        buffer->accept(command, steady);
     }
 
     double getCommandPeriod() const
