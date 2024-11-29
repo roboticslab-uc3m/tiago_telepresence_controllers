@@ -9,15 +9,22 @@
 #include <ros/console.h>
 #include <ros/time.h>
 
+#include <kdl/frames.hpp>
+#include <kdl/jntarray.hpp>
+
 constexpr auto CAPACITY_MULTIPLIER = 5;
 
 template <typename T>
 class CommandBufferBase
 {
 public:
+    using ValueType = T;
+
     CommandBufferBase(const std::string & name, int minSize, int cmdSize)
         : name(name), minSize(minSize)
     { }
+
+    virtual ~CommandBufferBase() = 0;
 
     void accept(const T & command, const ros::SteadyTime & timestamp)
     {
@@ -125,7 +132,7 @@ private:
     bool enabled {false};
 };
 
-class JointCommandBuffer : public CommandBufferBase<std::vector<double>>
+class JointCommandBuffer : public CommandBufferBase<KDL::JntArray>
 {
 public:
     JointCommandBuffer(const std::string & name, int minSize, int cmdSize)
@@ -135,11 +142,21 @@ public:
 
 protected:
     void updateSlopes() override;
-    std::vector<double> interpolateInternal(double t) override;
+    KDL::JntArray interpolateInternal(double t) override;
     void resetInternal() override;
 
 private:
     std::vector<double> slopes;
+};
+
+class FrameCommandBuffer : public CommandBufferBase<KDL::Frame>
+{
+public:
+    using CommandBufferBase::CommandBufferBase;
+
+protected:
+    void updateSlopes() override { }
+    KDL::Frame interpolateInternal(double t) override { }
 };
 
 #endif // __COMMAND_BUFFER_HPP__

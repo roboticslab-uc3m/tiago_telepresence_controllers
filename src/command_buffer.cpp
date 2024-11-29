@@ -8,20 +8,20 @@ void JointCommandBuffer::updateSlopes()
 
     for (auto i = 0; i < slopes.size(); i++)
     {
-        slopes[i] = dt != 0.0 ? (right->first[i] - left->first[i]) / dt : 0.0;
+        slopes[i] = dt != 0.0 ? (right->first(i) - left->first(i)) / dt : 0.0;
     }
 }
 
 // -----------------------------------------------------------------------------
 
-std::vector<double> JointCommandBuffer::interpolateInternal(double t)
+KDL::JntArray JointCommandBuffer::interpolateInternal(double t)
 {
     auto out = left->first;
 
     for (auto i = 0; i < slopes.size(); i++)
     {
         // having y = f(t): f(t+T) = f(t) + T * (delta_y / delta_t)
-        out[i] += t * slopes[i];
+        out(i) += t * slopes[i];
     }
 
     return out;

@@ -1,6 +1,7 @@
 #ifndef __TIAGO_GENERIC_TP_CONTROLLER_HPP__
 #define __TIAGO_GENERIC_TP_CONTROLLER_HPP__
 
+#include <algorithm> // std::transform
 #include <mutex>
 
 #include "controller_base.hpp"
@@ -8,6 +9,21 @@
 
 namespace tiago_controllers
 {
+
+inline KDL::JntArray jointVectorToKdl(const std::vector<double> & v)
+{
+    // https://forum.kde.org/viewtopic.php%3Ff=74&t=94839.html#p331301
+    KDL::JntArray ret;
+    ret.data = Eigen::VectorXd::Map(v.data(), v.size());
+    return ret;
+}
+
+inline std::vector<double> kdlToJointVector(const KDL::JntArray & q)
+{
+    // https://stackoverflow.com/a/26094702
+    const auto & priv = q.data;
+    return std::vector<double>(priv.data(), priv.data() + priv.rows());
+}
 
 template <typename T>
 class GenericController : public ControllerBase
@@ -31,12 +47,12 @@ private:
     }
 };
 
-template <typename T>
-class BufferedGenericController : public GenericController<T>
+template <typename T, typename B>
+class BufferedController : public GenericController<T>
 {
 public:
     using GenericController<T>::GenericController;
-    virtual ~BufferedGenericController() { delete buffer; }
+    ~BufferedController() override { delete buffer; }
 
 protected:
     bool additionalSetup(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n, const std::string &description)
@@ -49,19 +65,20 @@ protected:
             return false;
         }
 
-        buffer = new JointCommandBuffer(GenericController<T>::getName(), bufferMinSize, GenericController<T>::numJoints());
+        buffer = new B(GenericController<T>::getName(), bufferMinSize, GenericController<T>::numJoints());
         return true;
     }
 
     void onStarting(const std::vector<double> & angles) override
     {
+        const auto initialValue = convertToBufferType(angles);
         std::lock_guard<std::mutex> lock(bufferMutex);
-        buffer->reset(angles);
+        buffer->reset(initialValue);
     }
 
-    void accept(const std::vector<double> & command, const ros::Time & timestamp)
+    void accept(const typename B::ValueType & command, const ros::Time & timestamp)
     {
-        auto steady = ros::SteadyTime(timestamp.toSec());
+        const auto steady = ros::SteadyTime(timestamp.toSec());
         std::lock_guard<std::mutex> lock(bufferMutex);
         buffer->accept(command, steady);
     }
@@ -73,19 +90,48 @@ protected:
         return period.toSec();
     }
 
+    virtual typename B::ValueType convertToBufferType(const std::vector<double> & v) = 0;
+    virtual std::vector<double> convertToVector(const typename B::ValueType & v) = 0;
+
 private:
     std::vector<double> getDesiredJointValues(const std::vector<double> & current) override final
     {
         std::lock_guard<std::mutex> lock(bufferMutex);
-        return buffer->interpolate();
+        const auto value = buffer->interpolate();
+        return convertToVector(value);
     }
 
-    JointCommandBuffer * buffer {nullptr};
+    B * buffer {nullptr};
     mutable std::mutex bufferMutex;
 };
 
 template <typename T>
-class StepperGenericController : public GenericController<T>
+class JointBufferController : public BufferedController<T, JointCommandBuffer>
+{
+public:
+    using BufferedController<T, JointCommandBuffer>::BufferedController;
+
+protected:
+    KDL::JntArray convertToBufferType(const std::vector<double> & v) override
+    {
+        return jointVectorToKdl(v);
+    }
+
+    std::vector<double> convertToVector(const KDL::JntArray & v) override
+    {
+        return kdlToJointVector(v);
+    }
+};
+
+template <typename T>
+class FrameBufferController : public BufferedController<T, FrameCommandBuffer>
+{
+public:
+    using BufferedController<T, FrameCommandBuffer>::BufferedController;
+};
+
+template <typename T>
+class StepperController : public GenericController<T>
 {
 public:
     using GenericController<T>::GenericController;
@@ -99,6 +145,7 @@ protected:
             return false;
         }
 
+        stored.resize(GenericController<T>::numJoints(), 0.0);
         return true;
     }
 
@@ -113,12 +160,8 @@ private:
     {
         std::vector<double> desired(current.size());
         std::lock_guard<std::mutex> lock(storageMutex);
-
-        for (int i = 0; i < current.size(); i++)
-        {
-            desired[i] = current[i] + step * stored[i];
-        }
-
+        std::transform(current.cbegin(), current.cend(), stored.cbegin(), desired.begin(),
+                       [this](double c, double s) { return c + step * s; });
         return desired;
     }
 

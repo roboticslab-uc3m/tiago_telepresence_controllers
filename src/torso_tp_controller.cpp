@@ -6,10 +6,10 @@
 namespace tiago_controllers
 {
 
-class TorsoController : public StepperGenericController<std_msgs::Int32>
+class TorsoController : public StepperController<std_msgs::Int32>
 {
 public:
-    TorsoController() : StepperGenericController("torso") { }
+    TorsoController() : StepperController("torso") { }
 
 protected:
     void processData(const std_msgs::Int32& msg) override

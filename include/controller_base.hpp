@@ -15,6 +15,7 @@ class ControllerBase : public controller_interface::Controller<hardware_interfac
 {
 public:
     ControllerBase(const std::string &_name) : name(_name) {}
+    virtual ~ControllerBase() = default;
     bool init(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n) final override;
     void update(const ros::Time& time, const ros::Duration& period) final override;
 

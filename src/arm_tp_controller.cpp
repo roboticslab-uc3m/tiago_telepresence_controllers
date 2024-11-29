@@ -9,43 +9,19 @@
 #include <kdl/chain.hpp>
 #include <kdl/chainfksolverpos_recursive.hpp>
 #include <kdl/chainiksolvervel_pinv.hpp>
-#include <kdl/frames.hpp>
-#include <kdl/jntarray.hpp>
 #include <kdl/tree.hpp>
 
 constexpr auto UPDATE_LOG_THROTTLE = 1.0; // [s]
 
-namespace
-{
-    KDL::JntArray vectorToKdl(const std::vector<double> & q)
-    {
-        KDL::JntArray ret(q.size());
-
-        for (int i = 0; i < q.size(); i++)
-        {
-            ret(i) = q[i];
-        }
-
-        return ret;
-    }
-
-    std::vector<double> kdlToVector(const KDL::JntArray & q)
-    {
-        // https://stackoverflow.com/a/26094702
-        const auto & priv = q.data;
-        return std::vector<double>(priv.data(), priv.data() + priv.rows());
-    }
-}
-
 namespace tiago_controllers
 {
 
-class ArmController : public BufferedGenericController<geometry_msgs::PoseStamped>
+class ArmController : public FrameBufferController<geometry_msgs::PoseStamped>
 {
 public:
-    ArmController() : BufferedGenericController("arm") { }
+    ArmController() : FrameBufferController("arm") { }
 
-    ~ArmController()
+    ~ArmController() override
     {
         delete fkSolverPos;
         delete ikSolverVel;
@@ -53,11 +29,11 @@ public:
 
     void onStarting(const std::vector<double> & angles) override
     {
-        q = vectorToKdl(angles);
+        q = jointVectorToKdl(angles);
         fkSolverPos->JntToCart(q, H_0_N_initial);
         ROS_INFO("[%s] Initial position: %f %f %f", getName().c_str(), H_0_N_initial.p.x(), H_0_N_initial.p.y(), H_0_N_initial.p.z());
         H_0_N_prev = H_0_N_initial;
-        BufferedGenericController::onStarting(angles);
+        FrameBufferController::onStarting(angles);
         active = true;
     }
 
@@ -67,8 +43,10 @@ public:
     }
 
 protected:
-    void processData(const geometry_msgs::PoseStamped& msg) override;
     bool additionalSetup(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n, const std::string &description) override;
+    void processData(const geometry_msgs::PoseStamped& msg) override;
+    KDL::Frame convertToBufferType(const std::vector<double> & v) override;
+    std::vector<double> convertToVector(const KDL::Frame & v) override;
 
 private:
     bool checkReturnCode(int ret);
@@ -85,7 +63,9 @@ private:
 
 } // namespace tiago_controllers
 
-bool tiago_controllers::ArmController::additionalSetup(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n, const std::string &description)
+using namespace tiago_controllers;
+
+bool ArmController::additionalSetup(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n, const std::string &description)
 {
     KDL::Tree tree;
 
@@ -135,10 +115,10 @@ bool tiago_controllers::ArmController::additionalSetup(hardware_interface::Posit
     fkSolverPos = new KDL::ChainFkSolverPos_recursive(chain);
     ikSolverVel = new KDL::ChainIkSolverVel_pinv(chain, eps, maxIter);
 
-    return BufferedGenericController::additionalSetup(hw, n, description);
+    return FrameBufferController::additionalSetup(hw, n, description);
 }
 
-void tiago_controllers::ArmController::processData(const geometry_msgs::PoseStamped& msg)
+void ArmController::processData(const geometry_msgs::PoseStamped& msg)
 {
     if (!active)
     {
@@ -149,7 +129,7 @@ void tiago_controllers::ArmController::processData(const geometry_msgs::PoseStam
 
     if (period == 0.0)
     {
-        accept(kdlToVector(q), msg.header.stamp);
+        accept(H_0_N_prev, msg.header.stamp);
         return;
     }
 
@@ -170,7 +150,7 @@ void tiago_controllers::ArmController::processData(const geometry_msgs::PoseStam
     if (!checkReturnCode(ikSolverVel->CartToJnt(q, twist, qdot)))
     {
         ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Could not calculate joint velocities (1)", getName().c_str());
-        accept(kdlToVector(q), msg.header.stamp);
+        accept(H_0_N_prev, msg.header.stamp);
         return;
     }
 
@@ -184,7 +164,7 @@ void tiago_controllers::ArmController::processData(const geometry_msgs::PoseStam
         if (q_temp(i) < limits[i].first || q_temp(i) > limits[i].second)
         {
             ROS_WARN("[%s] Joint %d out of limits: %f not in [%f, %f]", getName().c_str(), i, q_temp(i), limits[i].first, limits[i].second);
-            accept(kdlToVector(q), msg.header.stamp);
+            accept(H_0_N_prev, msg.header.stamp);
             return;
         }
     }
@@ -194,7 +174,7 @@ void tiago_controllers::ArmController::processData(const geometry_msgs::PoseStam
     if (!checkReturnCode(ikSolverVel->CartToJnt(q_temp, twist, qdot_temp)))
     {
         ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Could not calculate joint velocities (2)", getName().c_str());
-        accept(kdlToVector(q), msg.header.stamp);
+        accept(H_0_N_prev, msg.header.stamp);
         return;
     }
 
@@ -202,10 +182,23 @@ void tiago_controllers::ArmController::processData(const geometry_msgs::PoseStam
     H_0_N_prev = H_0_N_desired;
     q = q_temp;
 
-    accept(kdlToVector(q), msg.header.stamp);
+    accept(H_0_N_desired, msg.header.stamp);
 }
 
-bool tiago_controllers::ArmController::checkReturnCode(int ret)
+KDL::Frame ArmController::convertToBufferType(const std::vector<double> & v)
+{
+    const auto q = jointVectorToKdl(v);
+    KDL::Frame H;
+    fkSolverPos->JntToCart(q, H);
+    return H;
+}
+
+std::vector<double> ArmController::convertToVector(const KDL::Frame & v)
+{
+    // TODO
+}
+
+bool ArmController::checkReturnCode(int ret)
 {
     switch (ret)
     {
@@ -223,4 +216,5 @@ bool tiago_controllers::ArmController::checkReturnCode(int ret)
     }
 }
 
+// don't remove the `tiago_controllers` namespace here
 PLUGINLIB_EXPORT_CLASS(tiago_controllers::ArmController, controller_interface::ControllerBase);

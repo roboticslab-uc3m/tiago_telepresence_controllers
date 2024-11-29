@@ -6,10 +6,10 @@
 namespace tiago_controllers
 {
 
-class GripperController : public StepperGenericController<std_msgs::Int32>
+class GripperController : public StepperController<std_msgs::Int32>
 {
 public:
-    GripperController() : StepperGenericController("gripper") { }
+    GripperController() : StepperController("gripper") { }
 
 protected:
     void processData(const std_msgs::Int32& msg) override
