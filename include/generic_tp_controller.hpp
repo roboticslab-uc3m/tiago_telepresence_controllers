@@ -49,7 +49,7 @@ protected:
             return false;
         }
 
-        buffer = new CommandBuffer(GenericController<T>::getName(), bufferMinSize, GenericController<T>::numJoints());
+        buffer = new JointCommandBuffer(GenericController<T>::getName(), bufferMinSize, GenericController<T>::numJoints());
         return true;
     }
 
@@ -80,7 +80,7 @@ private:
         return buffer->interpolate();
     }
 
-    CommandBuffer * buffer {nullptr};
+    JointCommandBuffer * buffer {nullptr};
     mutable std::mutex bufferMutex;
 };
 
