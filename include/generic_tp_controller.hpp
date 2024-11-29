@@ -49,7 +49,7 @@ protected:
             return false;
         }
 
-        buffer = new CommandBuffer(bufferMinSize, GenericController<T>::numJoints());
+        buffer = new CommandBuffer(GenericController<T>::getName(), bufferMinSize, GenericController<T>::numJoints());
         return true;
     }
 

@@ -1,6 +1,7 @@
 #include "command_buffer.hpp"
 
 #include <iterator> // std::advance
+#include <ros/console.h>
 
 constexpr auto CAPACITY_MULTIPLIER = 5;
 
@@ -17,6 +18,7 @@ void CommandBuffer::accept(const std::vector<double> & command, const ros::Stead
             // undesirable, but we need to keep our iterators valid
             std::advance(left, 1);
             std::advance(right, 1);
+            ROS_WARN("[%s] Reached buffer front", name.c_str());
         }
 
         buffer.pop_front();
@@ -85,6 +87,7 @@ std::vector<double> CommandBuffer::interpolate()
         }
         else
         {
+            ROS_WARN("[%s] Reached buffer rear", name.c_str());
             right = left;
         }
     }
