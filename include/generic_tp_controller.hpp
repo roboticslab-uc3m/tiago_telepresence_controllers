@@ -65,7 +65,7 @@ protected:
             return false;
         }
 
-        buffer = new B(GenericController<T>::getName(), bufferMinSize, GenericController<T>::numJoints());
+        buffer = makeBuffer(bufferMinSize);
         return true;
     }
 
@@ -90,6 +90,7 @@ protected:
         return period.toSec();
     }
 
+    virtual B * makeBuffer(int size) = 0;
     virtual typename B::ValueType convertToBufferType(const std::vector<double> & v) = 0;
     virtual std::vector<double> convertToVector(const typename B::ValueType & v, double period) = 0;
 
@@ -112,6 +113,11 @@ public:
     using BufferedController<T, JointCommandBuffer>::BufferedController;
 
 protected:
+    JointCommandBuffer * makeBuffer(int size) override
+    {
+        return new JointCommandBuffer(GenericController<T>::getName(), size, GenericController<T>::numJoints());
+    }
+
     KDL::JntArray convertToBufferType(const std::vector<double> & v) override
     {
         return jointVectorToKdl(v);
@@ -128,6 +134,12 @@ class FrameBufferController : public BufferedController<T, FrameCommandBuffer>
 {
 public:
     using BufferedController<T, FrameCommandBuffer>::BufferedController;
+
+protected:
+    FrameCommandBuffer * makeBuffer(int size) override
+    {
+        return new FrameCommandBuffer(GenericController<T>::getName(), size);
+    }
 };
 
 template <typename T>

@@ -3,6 +3,7 @@
 
 #include <iterator> // std::advance
 #include <list>
+#include <memory> // std::unique_ptr
 #include <utility> // std::pair
 #include <vector>
 
@@ -11,6 +12,7 @@
 
 #include <kdl/frames.hpp>
 #include <kdl/jntarray.hpp>
+#include <kdl/trajectory.hpp>
 
 constexpr auto CAPACITY_MULTIPLIER = 5;
 
@@ -20,7 +22,7 @@ class CommandBufferBase
 public:
     using ValueType = T;
 
-    CommandBufferBase(const std::string & name, int minSize, int cmdSize)
+    CommandBufferBase(const std::string & name, int minSize)
         : name(name), minSize(minSize)
     { }
 
@@ -50,7 +52,7 @@ public:
                     left->second = right->second;
                 }
 
-                updateSlopes();
+                update();
                 offset = ros::SteadyTime::now() - left->second;
                 enabled = true;
             }
@@ -76,11 +78,10 @@ public:
             {
                 if (needsUpdate)
                 {
-                    updateSlopes();
+                    update();
                 }
 
                 const auto t = (refTime - left->second).toSec();
-
                 return interpolateInternal(t);
             }
             else
@@ -91,7 +92,6 @@ public:
         }
 
         enabled = false;
-
         return right->first;
     }
 
@@ -117,7 +117,7 @@ public:
 protected:
     using BufferType = std::list<std::pair<T, ros::SteadyTime>>;
 
-    virtual void updateSlopes() = 0;
+    virtual void update() = 0;
     virtual T interpolateInternal(double t) = 0;
     virtual void resetInternal() { }
 
@@ -136,12 +136,12 @@ class JointCommandBuffer : public CommandBufferBase<KDL::JntArray>
 {
 public:
     JointCommandBuffer(const std::string & name, int minSize, int cmdSize)
-        : CommandBufferBase(name, minSize, cmdSize),
+        : CommandBufferBase(name, minSize),
           slopes(cmdSize, 0.0)
     { }
 
 protected:
-    void updateSlopes() override;
+    void update() override;
     KDL::JntArray interpolateInternal(double t) override;
     void resetInternal() override;
 
@@ -155,8 +155,12 @@ public:
     using CommandBufferBase::CommandBufferBase;
 
 protected:
-    void updateSlopes() override { }
-    KDL::Frame interpolateInternal(double t) override { }
+    void update() override;
+    KDL::Frame interpolateInternal(double t) override;
+    void resetInternal() override;
+
+private:
+    std::unique_ptr<KDL::Trajectory> trajectory;
 };
 
 #endif // __COMMAND_BUFFER_HPP__
