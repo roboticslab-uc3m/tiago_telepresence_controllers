@@ -6,10 +6,10 @@
 #include <geometry_msgs/PoseStamped.h>
 
 #include <kdl_parser/kdl_parser.hpp>
-#include <kdl/chain.hpp>
+
 #include <kdl/chainfksolverpos_recursive.hpp>
+#include <kdl/chainiksolverpos_nr.hpp>
 #include <kdl/chainiksolvervel_pinv.hpp>
-#include <kdl/tree.hpp>
 
 constexpr auto UPDATE_LOG_THROTTLE = 1.0; // [s]
 
@@ -23,16 +23,17 @@ public:
 
     ~ArmController() override
     {
+        delete ikSolverPos;
         delete fkSolverPos;
         delete ikSolverVel;
     }
 
     void onStarting(const std::vector<double> & angles) override
     {
-        q = jointVectorToKdl(angles);
-        fkSolverPos->JntToCart(q, H_0_N_initial);
+        q_slow = q_fast = jointVectorToKdl(angles);
+        fkSolverPos->JntToCart(q_slow, H_0_N_initial);
         ROS_INFO("[%s] Initial position: %f %f %f", getName().c_str(), H_0_N_initial.p.x(), H_0_N_initial.p.y(), H_0_N_initial.p.z());
-        H_0_N_prev = H_0_N_initial;
+        H_0_N_prev_slow = H_0_N_prev_fast = H_0_N_initial;
         FrameBufferController::onStarting(angles);
         active = true;
     }
@@ -46,17 +47,26 @@ protected:
     bool additionalSetup(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n, const std::string &description) override;
     void processData(const geometry_msgs::PoseStamped& msg) override;
     KDL::Frame convertToBufferType(const std::vector<double> & v) override;
-    std::vector<double> convertToVector(const KDL::Frame & v) override;
+    std::vector<double> convertToVector(const KDL::Frame & H_0_N, double period) override;
 
 private:
+    bool checkLimits(const KDL::JntArray & q);
     bool checkReturnCode(int ret);
 
     KDL::Chain chain;
     KDL::ChainFkSolverPos_recursive * fkSolverPos {nullptr};
+    KDL::ChainIkSolverPos_NR * ikSolverPos {nullptr};
     KDL::ChainIkSolverVel_pinv * ikSolverVel {nullptr};
+
     KDL::Frame H_0_N_initial;
-    KDL::Frame H_0_N_prev;
-    KDL::JntArray q;
+    KDL::Frame H_0_N_prev_slow;
+    KDL::Frame H_0_N_prev_fast;
+
+    KDL::JntArray qMin;
+    KDL::JntArray qMax;
+
+    KDL::JntArray q_slow;
+    KDL::JntArray q_fast;
 
     std::atomic_bool active {false};
 };
@@ -97,92 +107,72 @@ bool ArmController::additionalSetup(hardware_interface::PositionJointInterface* 
 
     ROS_INFO("[%s] Got chain with %d joints and %d segments", getName().c_str(), chain.getNrOfJoints(), chain.getNrOfSegments());
 
-    double eps;
-    int maxIter;
+    double epsPos, epsVel;
+    int maxIterPos, maxIterVel;
 
-    if (!n.getParam("ik_solver_vel_eps", eps))
+    if (!n.getParam("ik_solver_pos_eps", epsPos))
+    {
+        ROS_ERROR("[%s] Could not find ik_solver_pos_eps parameter", getName().c_str());
+        return false;
+    }
+
+    if (!n.getParam("ik_solver_pos_max_iter", maxIterPos))
+    {
+        ROS_ERROR("[%s] Could not find ik_solver_pos_max_iter parameter", getName().c_str());
+        return false;
+    }
+
+    if (!n.getParam("ik_solver_vel_eps", epsVel))
     {
         ROS_ERROR("[%s] Could not find ik_solver_vel_eps parameter", getName().c_str());
         return false;
     }
 
-    if (!n.getParam("ik_solver_vel_max_iter", maxIter))
+    if (!n.getParam("ik_solver_vel_max_iter", maxIterVel))
     {
         ROS_ERROR("[%s] Could not find ik_solver_vel_max_iter parameter", getName().c_str());
         return false;
     }
 
+    const auto & limits = getJointLimits();
+
+    qMin.resize(limits.size());
+    qMax.resize(limits.size());
+
+    for (auto i = 0; i < limits.size(); i++)
+    {
+        qMin(i) = limits[i].first;
+        qMax(i) = limits[i].second;
+    }
+
     fkSolverPos = new KDL::ChainFkSolverPos_recursive(chain);
-    ikSolverVel = new KDL::ChainIkSolverVel_pinv(chain, eps, maxIter);
+    ikSolverVel = new KDL::ChainIkSolverVel_pinv(chain, epsVel, maxIterVel);
+    ikSolverPos = new KDL::ChainIkSolverPos_NR(chain, *fkSolverPos, *ikSolverVel, epsPos, maxIterPos);
 
     return FrameBufferController::additionalSetup(hw, n, description);
 }
 
 void ArmController::processData(const geometry_msgs::PoseStamped& msg)
 {
-    if (!active)
+    if (active)
     {
-        return;
-    }
+        // change in pose between initial and desired, referred to the TCP on its initial pose
+        KDL::Frame H_N(
+            KDL::Rotation::Quaternion(msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w),
+            KDL::Vector(msg.pose.position.x, msg.pose.position.y, msg.pose.position.z)
+        );
 
-    const auto period = getCommandPeriod();
+        auto H_0_N = H_0_N_initial * H_N;
+        KDL::JntArray qd(q_slow.rows());
 
-    if (period == 0.0)
-    {
-        accept(H_0_N_prev, msg.header.stamp);
-        return;
-    }
-
-    // change in pose between initial and desired, referred to the TCP
-    KDL::Frame H_N(
-        KDL::Rotation::Quaternion(msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w),
-        KDL::Vector(msg.pose.position.x, msg.pose.position.y, msg.pose.position.z)
-    );
-
-    auto H_0_N_desired = H_0_N_initial * H_N;
-    auto twist = KDL::diff(H_0_N_prev, H_0_N_desired, period);
-
-    // refer to base frame, but leave the reference point intact
-    twist = H_0_N_initial.M * twist;
-
-    KDL::JntArray qdot(q.rows());
-
-    if (!checkReturnCode(ikSolverVel->CartToJnt(q, twist, qdot)))
-    {
-        ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Could not calculate joint velocities (1)", getName().c_str());
-        accept(H_0_N_prev, msg.header.stamp);
-        return;
-    }
-
-    const auto & limits = getJointLimits();
-    auto q_temp = q;
-
-    for (int i = 0; i < q_temp.rows(); i++)
-    {
-        q_temp(i) += qdot(i) * period;
-
-        if (q_temp(i) < limits[i].first || q_temp(i) > limits[i].second)
+        if (ikSolverPos->CartToJnt(q_slow, H_0_N, qd) >= 0 && checkLimits(qd))
         {
-            ROS_WARN("[%s] Joint %d out of limits: %f not in [%f, %f]", getName().c_str(), i, q_temp(i), limits[i].first, limits[i].second);
-            accept(H_0_N_prev, msg.header.stamp);
-            return;
+            H_0_N_prev_fast = H_0_N;
+            q_slow = qd;
         }
+
+        accept(H_0_N_prev_fast, msg.header.stamp);
     }
-
-    KDL::JntArray qdot_temp(chain.getNrOfJoints());
-
-    if (!checkReturnCode(ikSolverVel->CartToJnt(q_temp, twist, qdot_temp)))
-    {
-        ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Could not calculate joint velocities (2)", getName().c_str());
-        accept(H_0_N_prev, msg.header.stamp);
-        return;
-    }
-
-    // no singular point, so update the calculated pose and joint values
-    H_0_N_prev = H_0_N_desired;
-    q = q_temp;
-
-    accept(H_0_N_desired, msg.header.stamp);
 }
 
 KDL::Frame ArmController::convertToBufferType(const std::vector<double> & v)
@@ -193,9 +183,41 @@ KDL::Frame ArmController::convertToBufferType(const std::vector<double> & v)
     return H;
 }
 
-std::vector<double> ArmController::convertToVector(const KDL::Frame & v)
+std::vector<double> ArmController::convertToVector(const KDL::Frame & H_0_N, double period)
 {
-    // TODO
+    auto twist = KDL::diff(H_0_N_prev_slow, H_0_N, period);
+
+    // refer to base frame, but leave the reference point intact
+    twist = H_0_N_prev_slow.M * twist;
+
+    KDL::JntArray qdot(q_fast.rows());
+
+    if (checkReturnCode(ikSolverVel->CartToJnt(q_fast, twist, qdot)))
+    {
+        for (int i = 0; i < q_fast.rows(); i++)
+        {
+            q_fast(i) += qdot(i) * period;
+        }
+
+        H_0_N_prev_slow = H_0_N;
+    }
+
+    return kdlToJointVector(q_fast);
+}
+
+bool ArmController::checkLimits(const KDL::JntArray & q)
+{
+    for (int i = 0; i < q.rows(); i++)
+    {
+        if (q(i) < qMin(i) || q(i) > qMax(i))
+        {
+            ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Joint %d out of limits: %f not in [%f, %f]",
+                              getName().c_str(), i, q(i), qMin(i), qMax(i));
+            return false;
+        }
+    }
+
+    return true;
 }
 
 bool ArmController::checkReturnCode(int ret)

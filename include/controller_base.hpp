@@ -23,7 +23,7 @@ protected:
     const std::vector<std::pair<double, double>> & getJointLimits() const { return jointLimits; }
     virtual bool additionalSetup(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n, const std::string &description) { return true; }
     virtual void registerSubscriber(ros::NodeHandle &n, ros::Subscriber &sub) = 0;
-    virtual std::vector<double> getDesiredJointValues(const std::vector<double> & current) = 0;
+    virtual std::vector<double> getDesiredJointValues(const std::vector<double> & current, double period) = 0;
     virtual void onStarting(const std::vector<double> & angles) {}
     virtual void onDisabling() {}
     void updateStamp();

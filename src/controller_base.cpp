@@ -116,7 +116,7 @@ void ControllerBase::update(const ros::Time& time, const ros::Duration& period)
         onStarting(current);
     }
 
-    const auto desired = getDesiredJointValues(current);
+    const auto desired = getDesiredJointValues(current, period.toSec());
 
     for (int i = 0; i < joints.size(); i++)
     {
