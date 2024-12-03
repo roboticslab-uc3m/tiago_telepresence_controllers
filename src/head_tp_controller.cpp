@@ -16,13 +16,15 @@ protected:
     void processData(const geometry_msgs::QuaternionStamped& msg) override
     {
         const auto rot = KDL::Rotation::Quaternion(msg.quaternion.x, msg.quaternion.y, msg.quaternion.z, msg.quaternion.w);
-        rot.GetEulerZYX(q(0), q(1), _gamma); // R_z_alpha * R_y_beta * R_x_gamma
+        rot.GetEulerZYX(alpha, beta, gamma); // R_z_alpha * R_y_beta * R_x_gamma
+        q(0) = -beta;
+        q(1) = -gamma;
         accept(q, msg.header.stamp);
     }
 
 private:
     KDL::JntArray q;
-    double _gamma; // we are not going to use this
+    double alpha, beta, gamma;
 };
 
 } // namespace tiago_controllers
