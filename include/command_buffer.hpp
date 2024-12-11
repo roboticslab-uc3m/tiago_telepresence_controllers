@@ -97,7 +97,7 @@ public:
 
     ros::WallDuration getCommandPeriod() const
     {
-        return !buffer.empty() ? right->second - left->second : ros::WallDuration(0.0);
+        return !buffer.empty() ? (right->second - left->second) : ros::WallDuration(0.0);
     }
 
     void reset(const T & initialCommand)

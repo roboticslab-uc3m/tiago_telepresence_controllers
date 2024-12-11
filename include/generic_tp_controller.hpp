@@ -92,14 +92,14 @@ protected:
 
     virtual B * makeBuffer(int size) = 0;
     virtual typename B::ValueType convertToBufferType(const std::vector<double> & v) = 0;
-    virtual std::vector<double> convertToVector(const typename B::ValueType & v, double period) = 0;
+    virtual std::vector<double> convertToVector(const KDL::JntArray & q, const typename B::ValueType & v, double period) = 0;
 
 private:
     std::vector<double> getDesiredJointValues(const std::vector<double> & current, double period) override final
     {
         std::lock_guard<std::mutex> lock(bufferMutex);
         const auto value = buffer->interpolate();
-        return convertToVector(value, period);
+        return convertToVector(jointVectorToKdl(current), value, period);
     }
 
     B * buffer {nullptr};
@@ -123,7 +123,7 @@ protected:
         return jointVectorToKdl(v);
     }
 
-    std::vector<double> convertToVector(const KDL::JntArray & v, double period) override
+    std::vector<double> convertToVector(const KDL::JntArray & q, const KDL::JntArray & v, double period) override
     {
         return kdlToJointVector(v);
     }

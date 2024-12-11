@@ -8,7 +8,6 @@
 #include <kdl_parser/kdl_parser.hpp>
 
 #include <kdl/chainfksolverpos_recursive.hpp>
-#include <kdl/chainiksolverpos_nr.hpp>
 #include <kdl/chainiksolvervel_pinv.hpp>
 
 constexpr auto UPDATE_LOG_THROTTLE = 1.0; // [s]
@@ -23,7 +22,6 @@ public:
 
     ~ArmController() override
     {
-        delete ikSolverPos;
         delete fkSolverPos;
         delete ikSolverVel;
     }
@@ -47,7 +45,7 @@ protected:
     bool additionalSetup(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n, const std::string &description) override;
     void processData(const geometry_msgs::PoseStamped& msg) override;
     KDL::Frame convertToBufferType(const std::vector<double> & v) override;
-    std::vector<double> convertToVector(const KDL::Frame & H_0_N, double period) override;
+    std::vector<double> convertToVector(const KDL::JntArray & q, const KDL::Frame & H_0_N, double period) override;
 
 private:
     bool checkLimits(const KDL::JntArray & q);
@@ -55,7 +53,6 @@ private:
 
     KDL::Chain chain;
     KDL::ChainFkSolverPos_recursive * fkSolverPos {nullptr};
-    KDL::ChainIkSolverPos_NR * ikSolverPos {nullptr};
     KDL::ChainIkSolverVel_pinv * ikSolverVel {nullptr};
 
     KDL::Frame H_0_N_initial;
@@ -107,20 +104,8 @@ bool ArmController::additionalSetup(hardware_interface::PositionJointInterface* 
 
     ROS_INFO("[%s] Got chain with %d joints and %d segments", getName().c_str(), chain.getNrOfJoints(), chain.getNrOfSegments());
 
-    double epsPos, epsVel;
-    int maxIterPos, maxIterVel;
-
-    if (!n.getParam("ik_solver_pos_eps", epsPos))
-    {
-        ROS_ERROR("[%s] Could not find ik_solver_pos_eps parameter", getName().c_str());
-        return false;
-    }
-
-    if (!n.getParam("ik_solver_pos_max_iter", maxIterPos))
-    {
-        ROS_ERROR("[%s] Could not find ik_solver_pos_max_iter parameter", getName().c_str());
-        return false;
-    }
+    double epsVel;
+    int maxIterVel;
 
     if (!n.getParam("ik_solver_vel_eps", epsVel))
     {
@@ -147,7 +132,6 @@ bool ArmController::additionalSetup(hardware_interface::PositionJointInterface* 
 
     fkSolverPos = new KDL::ChainFkSolverPos_recursive(chain);
     ikSolverVel = new KDL::ChainIkSolverVel_pinv(chain, epsVel, maxIterVel);
-    ikSolverPos = new KDL::ChainIkSolverPos_NR(chain, *fkSolverPos, *ikSolverVel, epsPos, maxIterPos);
 
     return FrameBufferController::additionalSetup(hw, n, description);
 }
@@ -163,15 +147,7 @@ void ArmController::processData(const geometry_msgs::PoseStamped& msg)
         );
 
         auto H_0_N = H_0_N_initial * H_N;
-        KDL::JntArray qd(q_slow.rows());
-
-        if (ikSolverPos->CartToJnt(q_slow, H_0_N, qd) >= 0 && checkLimits(qd))
-        {
-            H_0_N_prev_fast = H_0_N;
-            q_slow = qd;
-        }
-
-        accept(H_0_N_prev_fast, msg.header.stamp);
+        accept(H_0_N, msg.header.stamp);
     }
 }
 
@@ -183,26 +159,35 @@ KDL::Frame ArmController::convertToBufferType(const std::vector<double> & v)
     return H;
 }
 
-std::vector<double> ArmController::convertToVector(const KDL::Frame & H_0_N, double period)
+std::vector<double> ArmController::convertToVector(const KDL::JntArray & q, const KDL::Frame & H_0_N, double period)
 {
-    auto twist = KDL::diff(H_0_N_prev_slow, H_0_N, period);
+    KDL::Frame H;
+    fkSolverPos->JntToCart(q, H);
+
+    auto twist = KDL::diff(H, H_0_N, period);
 
     // refer to base frame, but leave the reference point intact
-    twist = H_0_N_prev_slow.M * twist;
+    twist = H.M * twist;
 
-    KDL::JntArray qdot(q_fast.rows());
+    KDL::JntArray qd = q;
+    KDL::JntArray qdot(q.rows());
 
-    if (checkReturnCode(ikSolverVel->CartToJnt(q_fast, twist, qdot)))
+    if (checkReturnCode(ikSolverVel->CartToJnt(q, twist, qdot)))
     {
+        KDL::JntArray q_temp = qd;
+
         for (int i = 0; i < q_fast.rows(); i++)
         {
-            q_fast(i) += qdot(i) * period;
+            q_temp(i) += qdot(i) * period;
         }
 
-        H_0_N_prev_slow = H_0_N;
+        if (checkLimits(qd))
+        {
+            qd = q_temp;
+        }
     }
 
-    return kdlToJointVector(q_fast);
+    return kdlToJointVector(qd);
 }
 
 bool ArmController::checkLimits(const KDL::JntArray & q)
