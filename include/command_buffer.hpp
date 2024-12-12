@@ -26,7 +26,7 @@ public:
         : name(name), minSize(minSize)
     { }
 
-    virtual ~CommandBufferBase() = 0;
+    virtual ~CommandBufferBase() = default;
 
     void accept(const T & command, const ros::SteadyTime & timestamp)
     {
