@@ -28,10 +28,10 @@ public:
 
     void onStarting(const std::vector<double> & angles) override
     {
-        q_slow = q_fast = jointVectorToKdl(angles);
-        fkSolverPos->JntToCart(q_slow, H_0_N_initial);
+        q = jointVectorToKdl(angles);
+        fkSolverPos->JntToCart(q, H_0_N_initial);
         ROS_INFO("[%s] Initial position: %f %f %f", getName().c_str(), H_0_N_initial.p.x(), H_0_N_initial.p.y(), H_0_N_initial.p.z());
-        H_0_N_prev_slow = H_0_N_prev_fast = H_0_N_initial;
+        H_0_N_prev = H_0_N_initial;
         FrameBufferController::onStarting(angles);
         active = true;
     }
@@ -56,14 +56,11 @@ private:
     KDL::ChainIkSolverVel_pinv * ikSolverVel {nullptr};
 
     KDL::Frame H_0_N_initial;
-    KDL::Frame H_0_N_prev_slow;
-    KDL::Frame H_0_N_prev_fast;
+    KDL::Frame H_0_N_prev;
 
     KDL::JntArray qMin;
     KDL::JntArray qMax;
-
-    KDL::JntArray q_slow;
-    KDL::JntArray q_fast;
+    KDL::JntArray q;
 
     std::atomic_bool active {false};
 };
@@ -159,35 +156,30 @@ KDL::Frame ArmController::convertToBufferType(const std::vector<double> & v)
     return H;
 }
 
-std::vector<double> ArmController::convertToVector(const KDL::JntArray & q, const KDL::Frame & H_0_N, double period)
+std::vector<double> ArmController::convertToVector(const KDL::JntArray & q_real, const KDL::Frame & H_0_N, double period)
 {
-    KDL::Frame H;
-    fkSolverPos->JntToCart(q, H);
-
-    auto twist = KDL::diff(H, H_0_N, period);
-
     // refer to base frame, but leave the reference point intact
-    twist = H.M * twist;
+    const auto twist = H_0_N_prev.M * KDL::diff(H_0_N_prev, H_0_N, period);
 
-    KDL::JntArray qd = q;
     KDL::JntArray qdot(q.rows());
 
     if (checkReturnCode(ikSolverVel->CartToJnt(q, twist, qdot)))
     {
-        KDL::JntArray q_temp = qd;
+        KDL::JntArray q_temp = q;
 
-        for (int i = 0; i < q_fast.rows(); i++)
+        for (int i = 0; i < q.rows(); i++)
         {
             q_temp(i) += qdot(i) * period;
         }
 
-        if (checkLimits(qd))
+        if (checkLimits(q_temp))
         {
-            qd = q_temp;
+            q = q_temp;
+            H_0_N_prev = H_0_N;
         }
     }
 
-    return kdlToJointVector(qd);
+    return kdlToJointVector(q);
 }
 
 bool ArmController::checkLimits(const KDL::JntArray & q)
