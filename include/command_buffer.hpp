@@ -1,8 +1,6 @@
 #ifndef __COMMAND_BUFFER_HPP__
 #define __COMMAND_BUFFER_HPP__
 
-#include <iterator> // std::advance
-#include <list>
 #include <memory> // std::unique_ptr
 #include <utility> // std::pair
 #include <vector>
@@ -14,6 +12,8 @@
 #include <kdl/jntarray.hpp>
 #include <kdl/trajectory.hpp>
 
+#include "circular_buffer.hpp"
+
 constexpr auto CAPACITY_MULTIPLIER = 5;
 
 template <typename T>
@@ -23,32 +23,35 @@ public:
     using ValueType = T;
 
     CommandBufferBase(const std::string & name, int minSize)
-        : name(name), minSize(minSize)
+        : name(name),
+          minSize(minSize),
+          buffer((minSize + 1) * CAPACITY_MULTIPLIER),
+          left(buffer.end()),
+          right(buffer.end())
     { }
 
     virtual ~CommandBufferBase() = default;
 
     void accept(const T & command, const ros::SteadyTime & timestamp)
     {
-        buffer.emplace_back(command, timestamp);
+        const bool wasAtFront = left == buffer.begin();
+        buffer.push_back(std::make_pair(command, timestamp));
 
-        if (buffer.size() > minSize * (CAPACITY_MULTIPLIER + 1))
+        if (buffer.full())
         {
-            if (left == buffer.begin())
+            if (wasAtFront)
             {
                 // undesirable, but we need to keep our iterators valid
-                std::advance(left, 1);
-                std::advance(right, 1);
+                ++left;
+                ++right;
                 ROS_WARN("[%s] Reached buffer front", name.c_str());
             }
-
-            buffer.pop_front();
 
             if (!enabled)
             {
                 if (left == right)
                 {
-                    std::advance(right, 1);
+                    ++right;
                     left->second = right->second;
                 }
 
@@ -69,8 +72,8 @@ public:
 
             while (right->second < refTime && right != buffer.end())
             {
-                std::advance(left, 1);
-                std::advance(right, 1);
+                ++left;
+                ++right;
                 needsUpdate = true;
             }
 
@@ -86,7 +89,7 @@ public:
             }
             else
             {
-                ROS_WARN("[%s] Reached buffer rear", name.c_str());
+                ROS_WARN("[%s] Reached buffer back", name.c_str());
                 right = left;
             }
         }
@@ -102,20 +105,24 @@ public:
 
     void reset(const T & initialCommand)
     {
+        const auto dummy = std::make_pair(initialCommand, ros::SteadyTime(0.0));
+
         offset.fromSec(0.0);
-        buffer.assign(minSize * CAPACITY_MULTIPLIER, std::make_pair(initialCommand, ros::SteadyTime(0.0)));
+        buffer.clear();
 
-        left = right = buffer.end();
-        std::advance(left, -1);
-        std::advance(right, -1);
+        for (int i = 0; i < minSize * CAPACITY_MULTIPLIER; i++)
+        {
+            buffer.push_back(dummy);
+        }
 
+        left = right = buffer.end() - 1;
         enabled = false;
 
         resetInternal();
     }
 
 protected:
-    using BufferType = std::list<std::pair<T, ros::SteadyTime>>;
+    using BufferType = CircularBuffer<std::pair<T, ros::SteadyTime>>;
 
     virtual void update() = 0;
     virtual T interpolateInternal(double t) = 0;
