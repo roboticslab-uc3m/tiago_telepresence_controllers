@@ -25,7 +25,9 @@
 
 #include <algorithm>
 #include <iterator>
+#ifdef CB_USE_MUTEX
 #include <mutex>
+#endif
 #include <memory>
 #include <stdexcept>
 #include <utility>
@@ -142,7 +144,9 @@ public:
 private:
     void _increment_bufferstate();
     void _decrement_bufferstate();
+#ifdef CB_USE_MUTEX
     mutable std::mutex _mtx;
+#endif
     std::unique_ptr<value_type[]> _buff;
     size_type _head = 0;
     size_type _tail = 0;
@@ -306,21 +310,27 @@ typename CircularBuffer<T>::size_type CircularBuffer<T>::capacity() const{
 template<typename T>
 inline
 void  CircularBuffer<T>::clear(){
+#ifdef CB_USE_MUTEX
     std::lock_guard<std::mutex> _lck(_mtx);
+#endif
     _head = _tail = _size = 0;
 }
 
 template<typename T>
 inline
 typename CircularBuffer<T>::size_type CircularBuffer<T>::size() const{
+#ifdef CB_USE_MUTEX
     std::lock_guard<std::mutex> _lck(_mtx);
+#endif
     return _size;
     }
 
 template<typename T>
 inline
 typename CircularBuffer<T>::reference CircularBuffer<T>::front() {
+#ifdef CB_USE_MUTEX
     std::lock_guard<std::mutex> _lck(_mtx);
+#endif
     if(empty())
         throw std::length_error("front function called on empty buffer");
     return _buff[_tail];
@@ -329,7 +339,9 @@ typename CircularBuffer<T>::reference CircularBuffer<T>::front() {
 template<typename T>
 inline
 typename CircularBuffer<T>::reference CircularBuffer<T>::back() {
+#ifdef CB_USE_MUTEX
     std::lock_guard<std::mutex> _lck(_mtx);
+#endif
     if(empty())
         throw std::length_error("back function called on empty buffer");
     return _head == 0 ? _buff[_max_size - 1] : _buff[_head - 1];
@@ -338,7 +350,9 @@ typename CircularBuffer<T>::reference CircularBuffer<T>::back() {
 template<typename T>
 inline
 typename CircularBuffer<T>::const_reference CircularBuffer<T>::front() const{
+#ifdef CB_USE_MUTEX
     std::lock_guard<std::mutex> _lck(_mtx);
+#endif
     if(empty())
         throw std::length_error("front function called on empty buffer");
     return _buff[_tail];
@@ -347,7 +361,9 @@ typename CircularBuffer<T>::const_reference CircularBuffer<T>::front() const{
 template<typename T>
 inline
 typename CircularBuffer<T>::const_reference CircularBuffer<T>::back() const{
+#ifdef CB_USE_MUTEX
     std::lock_guard<std::mutex> _lck(_mtx);
+#endif
     if(empty())
         throw std::length_error("back function called on empty buffer");
     return _head == 0 ? _buff[_max_size - 1] : _buff[_head - 1];
@@ -356,7 +372,9 @@ typename CircularBuffer<T>::const_reference CircularBuffer<T>::back() const{
 template<typename T>
 inline
 void CircularBuffer<T>::push_back(const T& data){
+#ifdef CB_USE_MUTEX
     std::lock_guard<std::mutex> _lck(_mtx);
+#endif
     //if(full())
     //	_buff[_tail].~T();
     _buff[_head] = data;
@@ -366,7 +384,9 @@ void CircularBuffer<T>::push_back(const T& data){
 template<typename T>
 inline
 void CircularBuffer<T>::push_back(T&& data) noexcept{
+#ifdef CB_USE_MUTEX
     std::lock_guard<std::mutex> _lck(_mtx);
+#endif
     _buff[_head] = std::move(data);
     _increment_bufferstate();
 }
@@ -385,7 +405,9 @@ void CircularBuffer<T>::_increment_bufferstate(){
 template<typename T>
 inline
 void CircularBuffer<T>::pop_front(){
+#ifdef CB_USE_MUTEX
     std::lock_guard<std::mutex> _lck(_mtx);
+#endif
     if(empty())
         throw std::length_error("pop_front called on empty buffer");
     _decrement_bufferstate();
@@ -401,7 +423,9 @@ void CircularBuffer<T>::_decrement_bufferstate(){
 template<typename T>
 inline
 typename CircularBuffer<T>::reference CircularBuffer<T>::operator[](size_t index) {
+#ifdef CB_USE_MUTEX
     std::lock_guard<std::mutex> _lck(_mtx);
+#endif
     if((index<0)||(index>=_size))
         throw std::out_of_range("Index is out of Range of buffer size");
     index += _tail;
@@ -412,7 +436,9 @@ typename CircularBuffer<T>::reference CircularBuffer<T>::operator[](size_t index
 template<typename T>
 inline
 typename CircularBuffer<T>::const_reference CircularBuffer<T>::operator[](size_t index) const {
+#ifdef CB_USE_MUTEX
     std::lock_guard<std::mutex> _lck(_mtx);
+#endif
     if((index<0)||(index>=_size))
         throw std::out_of_range("Index is out of Range of buffer size");
     index += _tail;
@@ -423,7 +449,9 @@ typename CircularBuffer<T>::const_reference CircularBuffer<T>::operator[](size_t
 template<typename T>
 inline
 typename CircularBuffer<T>::reference CircularBuffer<T>::at(size_t index) {
+#ifdef CB_USE_MUTEX
     std::lock_guard<std::mutex> _lck(_mtx);
+#endif
     if((index<0)||(index>=_size))
         throw std::out_of_range("Index is out of Range of buffer size");
     index += _tail;
@@ -434,7 +462,9 @@ typename CircularBuffer<T>::reference CircularBuffer<T>::at(size_t index) {
 template<typename T>
 inline
 typename CircularBuffer<T>::const_reference CircularBuffer<T>::at(size_t index) const {
+#ifdef CB_USE_MUTEX
     std::lock_guard<std::mutex> _lck(_mtx);
+#endif
     if((index<0)||(index>=_size))
         throw std::out_of_range("Index is out of Range of buffer size");
     index += _tail;
@@ -445,7 +475,9 @@ typename CircularBuffer<T>::const_reference CircularBuffer<T>::at(size_t index) 
 template<typename T>
 inline
 typename CircularBuffer<T>::iterator CircularBuffer<T>::begin() {
+#ifdef CB_USE_MUTEX
     std::lock_guard<std::mutex> _lck(_mtx);
+#endif
     iterator iter;
     iter._ptrToBuffer = this;
     iter._offset = _tail;
@@ -457,7 +489,9 @@ typename CircularBuffer<T>::iterator CircularBuffer<T>::begin() {
 template<typename T>
 inline
 typename CircularBuffer<T>::const_iterator CircularBuffer<T>::begin() const{
+#ifdef CB_USE_MUTEX
     std::lock_guard<std::mutex> _lck(_mtx);
+#endif
     const_iterator iter;
     iter._ptrToBuffer = this;
     iter._offset = _tail;
@@ -469,7 +503,9 @@ typename CircularBuffer<T>::const_iterator CircularBuffer<T>::begin() const{
 template<typename T>
 inline
 typename CircularBuffer<T>::iterator CircularBuffer<T>::end() {
+#ifdef CB_USE_MUTEX
     std::lock_guard<std::mutex> _lck(_mtx);
+#endif
     iterator iter;
     iter._ptrToBuffer = this;
     iter._offset = _tail;
@@ -481,7 +517,9 @@ typename CircularBuffer<T>::iterator CircularBuffer<T>::end() {
 template<typename T>
 inline
 typename CircularBuffer<T>::const_iterator CircularBuffer<T>::end() const{
+#ifdef CB_USE_MUTEX
     std::lock_guard<std::mutex> _lck(_mtx);
+#endif
     const_iterator iter;
     iter._ptrToBuffer = this;
     iter._offset = _tail;
@@ -493,7 +531,9 @@ typename CircularBuffer<T>::const_iterator CircularBuffer<T>::end() const{
 template<typename T>
 inline
 typename CircularBuffer<T>::const_iterator CircularBuffer<T>::cbegin() const noexcept{
+#ifdef CB_USE_MUTEX
     std::lock_guard<std::mutex> _lck(_mtx);
+#endif
     const_iterator iter;
     iter._ptrToBuffer = this;
     iter._offset = _tail;
@@ -505,7 +545,9 @@ typename CircularBuffer<T>::const_iterator CircularBuffer<T>::cbegin() const noe
 template<typename T>
 inline
 typename CircularBuffer<T>::const_iterator CircularBuffer<T>::cend() const noexcept{
+#ifdef CB_USE_MUTEX
     std::lock_guard<std::mutex> _lck(_mtx);
+#endif
     const_iterator iter;
     iter._ptrToBuffer = this;
     iter._offset = _tail;
@@ -517,7 +559,9 @@ typename CircularBuffer<T>::const_iterator CircularBuffer<T>::cend() const noexc
 template<typename T>
 inline
 typename CircularBuffer<T>::iterator CircularBuffer<T>::rbegin() noexcept{
+#ifdef CB_USE_MUTEX
     std::lock_guard<std::mutex> _lck(_mtx);
+#endif
     iterator iter;
     iter._ptrToBuffer = this;
     iter._offset = _tail;
@@ -529,7 +573,9 @@ typename CircularBuffer<T>::iterator CircularBuffer<T>::rbegin() noexcept{
 template<typename T>
 inline
 typename CircularBuffer<T>::const_iterator CircularBuffer<T>::rbegin() const noexcept{
+#ifdef CB_USE_MUTEX
     std::lock_guard<std::mutex> _lck(_mtx);
+#endif
     const_iterator iter;
     iter._ptrToBuffer = this;
     iter._offset = _tail;
@@ -541,7 +587,9 @@ typename CircularBuffer<T>::const_iterator CircularBuffer<T>::rbegin() const noe
 template<typename T>
 inline
 typename CircularBuffer<T>::iterator CircularBuffer<T>::rend()  noexcept{
+#ifdef CB_USE_MUTEX
     std::lock_guard<std::mutex> _lck(_mtx);
+#endif
     iterator iter;
     iter._ptrToBuffer = this;
     iter._offset = _tail;
@@ -553,7 +601,9 @@ typename CircularBuffer<T>::iterator CircularBuffer<T>::rend()  noexcept{
 template<typename T>
 inline
 typename CircularBuffer<T>::const_iterator CircularBuffer<T>::rend() const noexcept{
+#ifdef CB_USE_MUTEX
     std::lock_guard<std::mutex> _lck(_mtx);
+#endif
     const_iterator iter;
     iter._ptrToBuffer = this;
     iter._offset = _tail;
