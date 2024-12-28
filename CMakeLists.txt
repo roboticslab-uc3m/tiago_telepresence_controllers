@@ -45,6 +45,7 @@ add_library(tiago_st_solvers src/st/MatrixExponential.cpp
                              src/st/ScrewTheoryIkProblem.cpp
                              src/st/ConfigurationSelector.cpp
                              src/st/ConfigurationSelectorLeastOverallAngularDisplacement.cpp
+                             src/st/chainiksolverpos_st.cpp
 )
 
 target_include_directories(tiago_st_solvers PUBLIC include/st)
