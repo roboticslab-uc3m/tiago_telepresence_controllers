@@ -3,16 +3,14 @@
 import argparse
 import rospy
 import actionlib
+
 from play_motion_msgs.msg import PlayMotionAction, PlayMotionGoal, PlayMotionResult
 from controller_manager_msgs.srv import ListControllers, SwitchController, SwitchControllerRequest
 from tiago_telepresence_controllers.srv import ArmMotion, ArmMotionResponse
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--arm", type=str, default=None)
-
-current_state = None
-list_controllers = None
-tp_controllers = []
+parser.add_argument("--motion", type=str, default=None)
 
 def pre_switch_controllers():
   cs = list_controllers().controller
@@ -46,44 +44,46 @@ def post_switch_controllers():
   if not response.ok:
     rospy.logfatal("Failed to switch controllers (post)")
 
-def handle_arm_motion(req):
+def execute_arm_motion(command):
   global current_state
 
-  if req.command == current_state:
-    rospy.loginfo("Motion '%s' already completed." % req.command)
-    return ArmMotionResponse(success=True)
+  if command == current_state:
+    rospy.loginfo("Motion '%s' already completed." % command)
+    return True, None
 
-  if len(tp_controllers) == 0:
-    cs = list_controllers().controller
-    tp_controllers.extend([c.name for c in cs if c.name.endswith("_tp_controller")])
-
-  rospy.loginfo("Executing motion: %s", req.command)
+  rospy.loginfo("Executing motion: %s", command)
 
   goal = PlayMotionGoal()
-  goal.motion_name = req.command
+  goal.motion_name = command
   goal.skip_planning = False
 
   pre_switch_controllers()
-  rospy.sleep(1.0) # important
+  rospy.sleep(2.0) # important
 
   client.send_goal(goal)
   client.wait_for_result(rospy.Duration(10.0))
   action_res = client.get_result()
-
-  res = ArmMotionResponse()
+  success, err_str = False, None
 
   # for some reason, action_res is sometimes None
   if action_res is None or action_res.error_code == PlayMotionResult.SUCCEEDED:
-    rospy.loginfo("Motion '%s' completed." % req.command)
-    res.success = True
-    current_state = req.command
+    rospy.loginfo("Motion '%s' completed." % command)
+    current_state = command
+    success = True
   else:
     rospy.logerr(action_res.error_string)
-    res.success = False
-    res.message = action_res.error_string
+    err_str = action_res.error_string
 
   post_switch_controllers()
-  return res
+  return success, err_str
+
+def arm_motion_callback(req):
+  success, err_str = execute_arm_motion(req.command)
+
+  if success:
+    return ArmMotionResponse(success=True)
+  else:
+    return ArmMotionResponse(success=False, message=err_str)
 
 if __name__ == "__main__":
   rospy.init_node("tp_arm_motion")
@@ -105,14 +105,17 @@ if __name__ == "__main__":
   client.wait_for_server()
   rospy.loginfo("...connected.")
 
-  controllers = rospy.get_param("/play_motion/controllers")
-
   rospy.wait_for_service("/controller_manager/list_controllers")
   rospy.wait_for_service("/controller_manager/switch_controller")
 
   list_controllers = rospy.ServiceProxy("/controller_manager/list_controllers", ListControllers)
   switch_controller = rospy.ServiceProxy("/controller_manager/switch_controller", SwitchController)
 
-  s = rospy.Service("/tp_arm_motion/command", ArmMotion, handle_arm_motion)
+  tp_controllers = [c.name for c in list_controllers().controller if c.name.endswith("_tp_controller")]
+
+  if args.motion:
+    execute_arm_motion(args.motion)
+
+  s = rospy.Service("/tp_arm_motion/command", ArmMotion, arm_motion_callback)
 
   rospy.spin()
