@@ -58,7 +58,7 @@ def execute_arm_motion(command):
   goal.skip_planning = False
 
   pre_switch_controllers()
-  rospy.sleep(2.0) # important
+  rospy.sleep(3.0) # important
 
   client.send_goal(goal)
   client.wait_for_result(rospy.Duration(10.0))
