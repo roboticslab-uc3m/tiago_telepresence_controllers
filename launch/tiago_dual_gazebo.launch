@@ -6,6 +6,7 @@
     <arg name="debug" default="false"/>
     <arg name="world" default="simple_office_with_people"/>
     <arg name="extra_gazebo_args" default=""/>
+    <arg name="motion" default=""/>
 
     <include file="$(find tiago_dual_gazebo)/launch/tiago_dual_gazebo.launch">
         <arg name="end_effector_left" value="pal-gripper"/>
@@ -26,5 +27,6 @@
 
     <include file="$(find tiago_telepresence_controllers)/launch/telepresence_controllers_dual.launch">
         <arg name="arm" value="right"/>
+        <arg name="motion" value="$(arg motion)"/>
     </include>
 </launch>
