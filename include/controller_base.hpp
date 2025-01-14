@@ -11,6 +11,8 @@
 namespace tiago_controllers
 {
 
+constexpr auto UPDATE_LOG_THROTTLE = 1.0; // [s]
+
 class ControllerBase : public controller_interface::Controller<hardware_interface::PositionJointInterface>
 {
 public:
@@ -44,6 +46,7 @@ private:
     ros::Time stamp;
     ros::Duration statePublishThrottle;
     ros::Time lastStatePublish;
+    bool notifyOutOfLimits {false};
 
     mutable std::mutex stampMutex;
 };

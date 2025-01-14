@@ -10,8 +10,6 @@
 #include <kdl/chainfksolverpos_recursive.hpp>
 #include <kdl/chainiksolvervel_pinv.hpp>
 
-constexpr auto UPDATE_LOG_THROTTLE = 1.0; // [s]
-
 namespace tiago_controllers
 {
 

@@ -1,6 +1,8 @@
 #include "controller_base.hpp"
 
 #include <algorithm> // std::max, std::min
+
+#include <ros/console.h>
 #include <urdf/model.h>
 #include <std_msgs/Float32MultiArray.h>
 
@@ -109,13 +111,6 @@ void ControllerBase::update(const ros::Time& time, const ros::Duration& period)
         msg.positions.push_back(joint.getPosition());
     }
 
-    if (!statePublishThrottle.isZero() && time - lastStatePublish > statePublishThrottle)
-    {
-        updateStatus(msg.status);
-        pub.publish(msg);
-        lastStatePublish = time;
-    }
-
     if (time - getLastStamp() > timeout)
     {
         if (isActive)
@@ -123,22 +118,49 @@ void ControllerBase::update(const ros::Time& time, const ros::Duration& period)
             isActive = false;
             onDisabling();
         }
-
-        return;
     }
-    else if (!isActive)
+    else
     {
-        isActive = true;
-        onStarting(msg.positions);
+        if (!isActive)
+        {
+            isActive = true;
+            onStarting(msg.positions);
+        }
+
+        const auto desired = getDesiredJointValues(msg.positions, period.toSec());
+
+        for (int i = 0; i < joints.size(); i++)
+        {
+            const auto & limits = jointLimits[i];
+            auto cmd = desired[i];
+
+            if (cmd < limits.first || cmd > limits.second)
+            {
+                ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Joint %d out of limits: %f not in [%f, %f]",
+                                  getName().c_str(), i, cmd, limits.first, limits.second);
+
+                cmd = std::max(limits.first, std::min(limits.second, cmd));
+                notifyOutOfLimits = true;
+            }
+
+            joints[i].setCommand(cmd);
+        }
     }
 
-    const auto desired = getDesiredJointValues(msg.positions, period.toSec());
-
-    for (int i = 0; i < joints.size(); i++)
+    if (!statePublishThrottle.isZero() && time - lastStatePublish > statePublishThrottle)
     {
-        const auto & limits = jointLimits[i];
-        const auto cmd = std::max(limits.first, std::min(limits.second, desired[i]));
+        if (isActive)
+        {
+            updateStatus(msg.status);
 
-        joints[i].setCommand(cmd);
+            if (notifyOutOfLimits)
+            {
+                msg.status = tiago_telepresence_controllers::JointPositions::CMD_OUT_OF_LIMITS;
+                notifyOutOfLimits = false;
+            }
+        }
+
+        pub.publish(msg);
+        lastStatePublish = time;
     }
 }
