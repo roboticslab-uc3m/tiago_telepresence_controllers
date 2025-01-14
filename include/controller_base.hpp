@@ -8,7 +8,7 @@
 #include <controller_interface/controller.h>
 #include <hardware_interface/joint_command_interface.h>
 
-namespace tiago_controllers
+namespace tiago_telepresence_controllers
 {
 
 constexpr auto UPDATE_LOG_THROTTLE = 1.0; // [s]
@@ -51,6 +51,6 @@ private:
     mutable std::mutex stampMutex;
 };
 
-} // namespace tiago_controllers
+} // namespace tiago_telepresence_controllers
 
 #endif // __TIAGO_TP_CONTROLLER_BASE_HPP__

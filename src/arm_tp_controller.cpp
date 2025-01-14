@@ -12,7 +12,7 @@
 
 #include "tiago_telepresence_controllers/JointPositions.h"
 
-namespace tiago_controllers
+namespace tiago_telepresence_controllers
 {
 
 class ArmController : public FrameBufferController<geometry_msgs::PoseStamped>
@@ -39,13 +39,13 @@ public:
     void onDisabling() override
     {
         active = false;
-        status = tiago_telepresence_controllers::JointPositions::CMD_OK;
+        status = JointPositions::CMD_OK;
     }
 
     void updateStatus(int & status) override
     {
         status = this->status;
-        this->status = tiago_telepresence_controllers::JointPositions::CMD_OK;
+        this->status = JointPositions::CMD_OK;
     }
 
 protected:
@@ -67,12 +67,12 @@ private:
     KDL::JntArray q;
 
     std::atomic_bool active {false};
-    std::atomic_int32_t status {tiago_telepresence_controllers::JointPositions::CMD_OK};
+    std::atomic_int32_t status {JointPositions::CMD_OK};
 };
 
-} // namespace tiago_controllers
+} // namespace tiago_telepresence_controllers
 
-using namespace tiago_controllers;
+using namespace tiago_telepresence_controllers;
 
 bool ArmController::additionalSetup(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n, const std::string &description)
 {
@@ -176,25 +176,25 @@ void ArmController::checkReturnCode(int ret)
     {
     case KDL::ChainIkSolverVel_pinv::E_CONVERGE_PINV_SINGULAR:
         ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Convergence issue: pseudo-inverse is singular", getName().c_str());
-        code = tiago_telepresence_controllers::JointPositions::CMD_SINGULARITY;
+        code = JointPositions::CMD_SINGULARITY;
         break;
     case KDL::SolverI::E_SVD_FAILED:
         ROS_ERROR_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Convergence issue: SVD failed", getName().c_str());
-        code = tiago_telepresence_controllers::JointPositions::CMD_CONVERGENCE;
+        code = JointPositions::CMD_CONVERGENCE;
         break;
     case KDL::SolverI::E_NOERROR:
         return;
     default:
         ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Convergence issue: unknown error", getName().c_str());
-        code = tiago_telepresence_controllers::JointPositions::CMD_UNKNOWN_ERROR;
+        code = JointPositions::CMD_UNKNOWN_ERROR;
         return;
     }
 
-    if (status == tiago_telepresence_controllers::JointPositions::CMD_OK || status > code)
+    if (status == JointPositions::CMD_OK || status > code)
     {
         status = code;
     }
 }
 
-// don't remove the `tiago_controllers` namespace here
-PLUGINLIB_EXPORT_CLASS(tiago_controllers::ArmController, controller_interface::ControllerBase);
+// don't remove the `tiago_telepresence_controllers` namespace here
+PLUGINLIB_EXPORT_CLASS(tiago_telepresence_controllers::ArmController, controller_interface::ControllerBase);

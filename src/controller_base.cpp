@@ -8,7 +8,7 @@
 
 #include "tiago_telepresence_controllers/JointPositions.h"
 
-using namespace tiago_controllers;
+using namespace tiago_telepresence_controllers;
 
 constexpr auto INPUT_TIMEOUT = 0.25; // [s]
 
@@ -84,7 +84,7 @@ void ControllerBase::registerPublisher(ros::NodeHandle &n, ros::Publisher &pub)
 {
     if (!statePublishThrottle.isZero())
     {
-        pub = n.advertise<tiago_telepresence_controllers::JointPositions>("state", 1);
+        pub = n.advertise<JointPositions>("state", 1);
     }
 }
 
@@ -104,7 +104,7 @@ void ControllerBase::update(const ros::Time& time, const ros::Duration& period)
 {
     static const ros::Duration timeout(INPUT_TIMEOUT);
 
-    tiago_telepresence_controllers::JointPositions msg;
+    JointPositions msg;
 
     for (const auto & joint : joints)
     {
@@ -155,7 +155,7 @@ void ControllerBase::update(const ros::Time& time, const ros::Duration& period)
 
             if (notifyOutOfLimits)
             {
-                msg.status = tiago_telepresence_controllers::JointPositions::CMD_OUT_OF_LIMITS;
+                msg.status = JointPositions::CMD_OUT_OF_LIMITS;
                 notifyOutOfLimits = false;
             }
         }
