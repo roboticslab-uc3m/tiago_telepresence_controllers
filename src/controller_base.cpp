@@ -4,6 +4,8 @@
 #include <urdf/model.h>
 #include <std_msgs/Float32MultiArray.h>
 
+#include "tiago_telepresence_controllers/JointPositions.h"
+
 using namespace tiago_controllers;
 
 constexpr auto INPUT_TIMEOUT = 0.25; // [s]
@@ -50,6 +52,15 @@ bool ControllerBase::init(hardware_interface::PositionJointInterface* hw, ros::N
         jointLimits.emplace_back(joint->limits->lower, joint->limits->upper);
     }
 
+    {
+        double statePublishThrottleDouble;
+
+        if (n.getParam("state_publish_throttle", statePublishThrottleDouble))
+        {
+            statePublishThrottle.fromSec(statePublishThrottleDouble);
+        }
+    }
+
     registerSubscriber(n, sub);
     registerPublisher(n, pub);
 
@@ -69,7 +80,10 @@ bool ControllerBase::init(hardware_interface::PositionJointInterface* hw, ros::N
 
 void ControllerBase::registerPublisher(ros::NodeHandle &n, ros::Publisher &pub)
 {
-    pub = n.advertise<std_msgs::Float32MultiArray>("state", 1);
+    if (!statePublishThrottle.isZero())
+    {
+        pub = n.advertise<tiago_telepresence_controllers::JointPositions>("state", 1);
+    }
 }
 
 void ControllerBase::updateStamp()
@@ -88,17 +102,19 @@ void ControllerBase::update(const ros::Time& time, const ros::Duration& period)
 {
     static const ros::Duration timeout(INPUT_TIMEOUT);
 
-    std_msgs::Float32MultiArray msg;
-    std::vector<double> current;
+    tiago_telepresence_controllers::JointPositions msg;
 
     for (const auto & joint : joints)
     {
-        const auto position = joint.getPosition();
-        msg.data.push_back(position);
-        current.push_back(position);
+        msg.positions.push_back(joint.getPosition());
     }
 
-    pub.publish(msg);
+    if (!statePublishThrottle.isZero() && time - lastStatePublish > statePublishThrottle)
+    {
+        updateStatus(msg.status);
+        pub.publish(msg);
+        lastStatePublish = time;
+    }
 
     if (time - getLastStamp() > timeout)
     {
@@ -113,10 +129,10 @@ void ControllerBase::update(const ros::Time& time, const ros::Duration& period)
     else if (!isActive)
     {
         isActive = true;
-        onStarting(current);
+        onStarting(msg.positions);
     }
 
-    const auto desired = getDesiredJointValues(current, period.toSec());
+    const auto desired = getDesiredJointValues(msg.positions, period.toSec());
 
     for (int i = 0; i < joints.size(); i++)
     {

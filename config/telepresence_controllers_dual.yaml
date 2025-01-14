@@ -33,3 +33,4 @@ arm_right_tp_controller:
   start_link: "torso_lift_link"
   end_link: "gripper_right_grasping_frame"
   buffer_min_size: 5
+  state_publish_throttle: 0.05

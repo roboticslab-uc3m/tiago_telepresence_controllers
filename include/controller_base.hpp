@@ -26,6 +26,7 @@ protected:
     virtual std::vector<double> getDesiredJointValues(const std::vector<double> & current, double period) = 0;
     virtual void onStarting(const std::vector<double> & angles) {}
     virtual void onDisabling() {}
+    virtual void updateStatus(int & status) {}
     void updateStamp();
     int numJoints() const { return joints.size(); }
     const std::string & getName() const { return name; }
@@ -41,6 +42,8 @@ private:
     std::vector<hardware_interface::JointHandle> joints;
     std::vector<std::pair<double, double>> jointLimits;
     ros::Time stamp;
+    ros::Duration statePublishThrottle;
+    ros::Time lastStatePublish;
 
     mutable std::mutex stampMutex;
 };
