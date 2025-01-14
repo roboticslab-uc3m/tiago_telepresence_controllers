@@ -53,16 +53,16 @@ bool ControllerBase::init(hardware_interface::PositionJointInterface* hw, ros::N
     registerSubscriber(n, sub);
     registerPublisher(n, pub);
 
-    std::vector<double> initial(joints.size());
-    std::string out;
-
-    for (int i = 0; i < joints.size(); i++)
     {
-        initial[i] = joints[i].getPosition();
-        out += " " + std::to_string(initial[i]);
-    }
+        std::string out;
 
-    ROS_INFO("Initial joint configuration for %s:%s", name.c_str(), out.c_str());
+        for (const auto & joint : joints)
+        {
+            out += " " + std::to_string(joint.getPosition());
+        }
+
+        ROS_INFO("Initial joint configuration for %s:%s", name.c_str(), out.c_str());
+    }
 
     return additionalSetup(hw, n, robot_desc_string);
 }
