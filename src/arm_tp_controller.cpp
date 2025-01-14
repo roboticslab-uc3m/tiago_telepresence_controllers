@@ -10,6 +10,8 @@
 #include <kdl/chainfksolverpos_recursive.hpp>
 #include <kdl/chainiksolvervel_pinv.hpp>
 
+#include "tiago_telepresence_controllers/JointPositions.h"
+
 namespace tiago_controllers
 {
 
@@ -37,6 +39,13 @@ public:
     void onDisabling() override
     {
         active = false;
+        status = tiago_telepresence_controllers::JointPositions::CMD_OK;
+    }
+
+    void updateStatus(int & status) override
+    {
+        status = this->status;
+        this->status = tiago_telepresence_controllers::JointPositions::CMD_OK;
     }
 
 protected:
@@ -46,8 +55,7 @@ protected:
     std::vector<double> convertToVector(const KDL::JntArray & q, const KDL::Frame & H_0_N, double period) override;
 
 private:
-    bool checkLimits(const KDL::JntArray & q);
-    bool checkReturnCode(int ret);
+    void checkReturnCode(int ret);
 
     KDL::Chain chain;
     KDL::ChainFkSolverPos_recursive * fkSolverPos {nullptr};
@@ -56,11 +64,10 @@ private:
     KDL::Frame H_0_N_initial;
     KDL::Frame H_0_N_prev;
 
-    KDL::JntArray qMin;
-    KDL::JntArray qMax;
     KDL::JntArray q;
 
     std::atomic_bool active {false};
+    std::atomic_int32_t status {tiago_telepresence_controllers::JointPositions::CMD_OK};
 };
 
 } // namespace tiago_controllers
@@ -114,17 +121,6 @@ bool ArmController::additionalSetup(hardware_interface::PositionJointInterface* 
         return false;
     }
 
-    const auto & limits = getJointLimits();
-
-    qMin.resize(limits.size());
-    qMax.resize(limits.size());
-
-    for (auto i = 0; i < limits.size(); i++)
-    {
-        qMin(i) = limits[i].first;
-        qMax(i) = limits[i].second;
-    }
-
     fkSolverPos = new KDL::ChainFkSolverPos_recursive(chain);
     ikSolverVel = new KDL::ChainIkSolverVel_pinv(chain, epsVel, maxIterVel);
 
@@ -160,56 +156,43 @@ std::vector<double> ArmController::convertToVector(const KDL::JntArray & q_real,
     const auto twist = H_0_N_prev.M * KDL::diff(H_0_N_prev, H_0_N, period);
 
     KDL::JntArray qdot(q.rows());
+    checkReturnCode(ikSolverVel->CartToJnt(q, twist, qdot));
 
-    if (checkReturnCode(ikSolverVel->CartToJnt(q, twist, qdot)))
+    for (int i = 0; i < q.rows(); i++)
     {
-        KDL::JntArray q_temp = q;
-
-        for (int i = 0; i < q.rows(); i++)
-        {
-            q_temp(i) += qdot(i) * period;
-        }
-
-        if (checkLimits(q_temp))
-        {
-            q = q_temp;
-            H_0_N_prev = H_0_N;
-        }
+        q(i) += qdot(i) * period;
     }
+
+    H_0_N_prev = H_0_N;
 
     return kdlToJointVector(q);
 }
 
-bool ArmController::checkLimits(const KDL::JntArray & q)
+void ArmController::checkReturnCode(int ret)
 {
-    for (int i = 0; i < q.rows(); i++)
-    {
-        if (q(i) < qMin(i) || q(i) > qMax(i))
-        {
-            ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Joint %d out of limits: %f not in [%f, %f]",
-                              getName().c_str(), i, q(i), qMin(i), qMax(i));
-            return false;
-        }
-    }
+    int code;
 
-    return true;
-}
-
-bool ArmController::checkReturnCode(int ret)
-{
     switch (ret)
     {
     case KDL::ChainIkSolverVel_pinv::E_CONVERGE_PINV_SINGULAR:
         ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Convergence issue: pseudo-inverse is singular", getName().c_str());
-        return false;
+        code = tiago_telepresence_controllers::JointPositions::CMD_SINGULARITY;
+        break;
     case KDL::SolverI::E_SVD_FAILED:
         ROS_ERROR_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Convergence issue: SVD failed", getName().c_str());
-        return false;
+        code = tiago_telepresence_controllers::JointPositions::CMD_CONVERGENCE;
+        break;
     case KDL::SolverI::E_NOERROR:
-        return true;
+        return;
     default:
         ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Convergence issue: unknown error", getName().c_str());
-        return false;
+        code = tiago_telepresence_controllers::JointPositions::CMD_UNKNOWN_ERROR;
+        return;
+    }
+
+    if (status == tiago_telepresence_controllers::JointPositions::CMD_OK || status > code)
+    {
+        status = code;
     }
 }
 
