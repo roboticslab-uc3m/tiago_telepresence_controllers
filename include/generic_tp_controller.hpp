@@ -76,7 +76,7 @@ protected:
         buffer->reset(initialValue);
     }
 
-    void accept(const typename B::ValueType & command, const ros::Time & timestamp)
+    void accept(const typename B::DataType & command, const ros::Time & timestamp)
     {
         const auto steady = ros::SteadyTime(timestamp.toSec());
         std::lock_guard<std::mutex> lock(bufferMutex);

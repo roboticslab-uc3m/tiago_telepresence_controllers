@@ -11,11 +11,12 @@
 #include <kdl/chainiksolvervel_pinv.hpp>
 
 #include "tiago_telepresence_controllers/JointPositions.h"
+#include "tiago_telepresence_controllers/VRControllerStamped.h"
 
 namespace tiago_telepresence_controllers
 {
 
-class ArmController : public FrameBufferController<geometry_msgs::PoseStamped>
+class ArmController : public FrameBufferController<VRControllerStamped>
 {
 public:
     ArmController() : FrameBufferController("arm") { }
@@ -50,7 +51,7 @@ public:
 
 protected:
     bool additionalSetup(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n, const std::string &description) override;
-    void processData(const geometry_msgs::PoseStamped& msg) override;
+    void processData(const VRControllerStamped& msg) override;
     KDL::Frame convertToBufferType(const std::vector<double> & v) override;
     std::vector<double> convertToVector(const KDL::JntArray & q, const KDL::Frame & H_0_N, double period) override;
 
@@ -127,7 +128,7 @@ bool ArmController::additionalSetup(hardware_interface::PositionJointInterface* 
     return FrameBufferController::additionalSetup(hw, n, description);
 }
 
-void ArmController::processData(const geometry_msgs::PoseStamped& msg)
+void ArmController::processData(const VRControllerStamped& msg)
 {
     if (active)
     {
@@ -138,7 +139,14 @@ void ArmController::processData(const geometry_msgs::PoseStamped& msg)
         );
 
         auto H_0_N = H_0_N_initial * H_N;
-        accept(H_0_N, msg.header.stamp);
+
+        auto twist = KDL::Twist(
+            KDL::Vector(msg.twist.linear.x, msg.twist.linear.y, msg.twist.linear.z),
+            KDL::Vector(msg.twist.angular.x, msg.twist.angular.y, msg.twist.angular.z)
+        );
+
+        VRControllerData data {H_0_N, twist};
+        accept(data, msg.header.stamp);
     }
 }
 

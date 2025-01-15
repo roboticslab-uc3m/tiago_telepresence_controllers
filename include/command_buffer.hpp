@@ -16,11 +16,12 @@
 
 constexpr auto CAPACITY_MULTIPLIER = 5;
 
-template <typename T>
+template <typename T, typename R = T>
 class CommandBufferBase
 {
 public:
-    using ValueType = T;
+    using DataType = T;
+    using ValueType = R;
 
     CommandBufferBase(const std::string & name, int minSize)
         : name(name), minSize(minSize)
@@ -59,7 +60,7 @@ public:
         }
     }
 
-    T interpolate()
+    R interpolate()
     {
         const auto refTime = ros::SteadyTime::now() - offset;
 
@@ -92,7 +93,7 @@ public:
         }
 
         enabled = false;
-        return right->first;
+        return getResult();
     }
 
     ros::WallDuration getCommandPeriod() const
@@ -100,10 +101,10 @@ public:
         return !buffer.empty() ? (right->second - left->second) : ros::WallDuration(0.0);
     }
 
-    void reset(const T & initialCommand)
+    void reset(const R & initialCommand)
     {
         offset.fromSec(0.0);
-        buffer.assign(minSize * CAPACITY_MULTIPLIER, std::make_pair(initialCommand, ros::SteadyTime(0.0)));
+        buffer.assign(minSize * CAPACITY_MULTIPLIER, std::make_pair(T(initialCommand), ros::SteadyTime(0.0)));
 
         left = right = buffer.end();
         std::advance(left, -1);
@@ -118,8 +119,9 @@ protected:
     using BufferType = std::list<std::pair<T, ros::SteadyTime>>;
 
     virtual void update() = 0;
-    virtual T interpolateInternal(double t) = 0;
+    virtual R interpolateInternal(double t) = 0;
     virtual void resetInternal() { }
+    virtual R & getResult() = 0;
 
     typename BufferType::iterator left;
     typename BufferType::iterator right;
@@ -145,11 +147,30 @@ protected:
     KDL::JntArray interpolateInternal(double t) override;
     void resetInternal() override;
 
+    KDL::JntArray & getResult() override
+    {
+        return right->first;
+    }
+
 private:
     std::vector<double> slopes;
 };
 
-class FrameCommandBuffer : public CommandBufferBase<KDL::Frame>
+struct VRControllerData
+{
+    VRControllerData(const KDL::Frame & pose)
+        : pose(pose)
+    { }
+
+    VRControllerData(const KDL::Frame & pose, const KDL::Twist & twist)
+        : pose(pose), twist(twist)
+    { }
+
+    KDL::Frame pose;
+    KDL::Twist twist;
+};
+
+class FrameCommandBuffer : public CommandBufferBase<VRControllerData, KDL::Frame>
 {
 public:
     using CommandBufferBase::CommandBufferBase;
@@ -158,6 +179,11 @@ protected:
     void update() override;
     KDL::Frame interpolateInternal(double t) override;
     void resetInternal() override;
+
+    KDL::Frame & getResult() override
+    {
+        return right->first.pose;
+    }
 
 private:
     std::unique_ptr<KDL::Trajectory> trajectory;

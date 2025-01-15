@@ -19,6 +19,7 @@ find_package(orocos_kdl REQUIRED)
 add_message_files(
     FILES
     JointPositions.msg
+    VRControllerStamped.msg
 )
 
 add_service_files(
@@ -29,6 +30,7 @@ add_service_files(
 generate_messages(
     DEPENDENCIES
     std_msgs
+    geometry_msgs
 )
 
 catkin_package()
