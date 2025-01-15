@@ -7,7 +7,7 @@
 #include "controller_base.hpp"
 #include "command_buffer.hpp"
 
-namespace tiago_controllers
+namespace tiago_telepresence_controllers
 {
 
 inline KDL::JntArray jointVectorToKdl(const std::vector<double> & v)
@@ -182,6 +182,6 @@ private:
     mutable std::mutex storageMutex;
 };
 
-} // namespace tiago_controllers
+} // namespace tiago_telepresence_controllers
 
 #endif // __TIAGO_GENERIC_TP_CONTROLLER_HPP__

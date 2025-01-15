@@ -4,7 +4,7 @@
 #include <geometry_msgs/QuaternionStamped.h>
 #include <kdl/frames.hpp>
 
-namespace tiago_controllers
+namespace tiago_telepresence_controllers
 {
 
 class HeadController : public JointBufferController<geometry_msgs::QuaternionStamped>
@@ -27,6 +27,6 @@ private:
     double alpha, beta, gamma;
 };
 
-} // namespace tiago_controllers
+} // namespace tiago_telepresence_controllers
 
-PLUGINLIB_EXPORT_CLASS(tiago_controllers::HeadController, controller_interface::ControllerBase);
+PLUGINLIB_EXPORT_CLASS(tiago_telepresence_controllers::HeadController, controller_interface::ControllerBase);

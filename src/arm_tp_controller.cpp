@@ -10,9 +10,9 @@
 #include <kdl/chainfksolverpos_recursive.hpp>
 #include <kdl/chainiksolvervel_pinv.hpp>
 
-constexpr auto UPDATE_LOG_THROTTLE = 1.0; // [s]
+#include "tiago_telepresence_controllers/JointPositions.h"
 
-namespace tiago_controllers
+namespace tiago_telepresence_controllers
 {
 
 class ArmController : public FrameBufferController<geometry_msgs::PoseStamped>
@@ -39,6 +39,13 @@ public:
     void onDisabling() override
     {
         active = false;
+        status = JointPositions::CMD_OK;
+    }
+
+    void updateStatus(int & status) override
+    {
+        status = this->status;
+        this->status = JointPositions::CMD_OK;
     }
 
 protected:
@@ -48,7 +55,6 @@ protected:
     std::vector<double> convertToVector(const KDL::JntArray & q, const KDL::Frame & H_0_N, double period) override;
 
 private:
-    bool checkLimits(const KDL::JntArray & q);
     bool checkReturnCode(int ret);
 
     KDL::Chain chain;
@@ -58,16 +64,15 @@ private:
     KDL::Frame H_0_N_initial;
     KDL::Frame H_0_N_prev;
 
-    KDL::JntArray qMin;
-    KDL::JntArray qMax;
     KDL::JntArray q;
 
     std::atomic_bool active {false};
+    std::atomic_int32_t status {JointPositions::CMD_OK};
 };
 
-} // namespace tiago_controllers
+} // namespace tiago_telepresence_controllers
 
-using namespace tiago_controllers;
+using namespace tiago_telepresence_controllers;
 
 bool ArmController::additionalSetup(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n, const std::string &description)
 {
@@ -116,17 +121,6 @@ bool ArmController::additionalSetup(hardware_interface::PositionJointInterface* 
         return false;
     }
 
-    const auto & limits = getJointLimits();
-
-    qMin.resize(limits.size());
-    qMax.resize(limits.size());
-
-    for (auto i = 0; i < limits.size(); i++)
-    {
-        qMin(i) = limits[i].first;
-        qMax(i) = limits[i].second;
-    }
-
     fkSolverPos = new KDL::ChainFkSolverPos_recursive(chain);
     ikSolverVel = new KDL::ChainIkSolverVel_pinv(chain, epsVel, maxIterVel);
 
@@ -158,62 +152,68 @@ KDL::Frame ArmController::convertToBufferType(const std::vector<double> & v)
 
 std::vector<double> ArmController::convertToVector(const KDL::JntArray & q_real, const KDL::Frame & H_0_N, double period)
 {
-    // refer to base frame, but leave the reference point intact
-    const auto twist = H_0_N_prev.M * KDL::diff(H_0_N_prev, H_0_N, period);
+    // refer to base frame, but leave the reference point intact;
+    // using H_O_N_initial instead of H_0_N_prev for some reason the original author once knew
+    // and now forgot, but hey, it seems to work better this way
+    const auto twist = H_0_N_initial.M * KDL::diff(H_0_N_prev, H_0_N, period);
 
     KDL::JntArray qdot(q.rows());
 
-    if (checkReturnCode(ikSolverVel->CartToJnt(q, twist, qdot)))
+    if (!checkReturnCode(ikSolverVel->CartToJnt(q, twist, qdot)))
     {
-        KDL::JntArray q_temp = q;
+        ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Stored configuration is singular, will attempt to move anyway", getName().c_str());
+    }
 
-        for (int i = 0; i < q.rows(); i++)
-        {
-            q_temp(i) += qdot(i) * period;
-        }
+    // look ahead in case the desired motion would place us in a singular point
+    KDL::JntArray q_temp(q);
 
-        if (checkLimits(q_temp))
-        {
-            q = q_temp;
-            H_0_N_prev = H_0_N;
-        }
+    for (int i = 0; i < q.rows(); i++)
+    {
+        q_temp(i) += qdot(i) * period;
+    }
+
+    if (checkReturnCode(ikSolverVel->CartToJnt(q_temp, twist, qdot)))
+    {
+        // no singular point, so update the calculated joint configuration and pose
+        q = q_temp;
+        H_0_N_prev = H_0_N;
     }
 
     return kdlToJointVector(q);
 }
 
-bool ArmController::checkLimits(const KDL::JntArray & q)
-{
-    for (int i = 0; i < q.rows(); i++)
-    {
-        if (q(i) < qMin(i) || q(i) > qMax(i))
-        {
-            ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Joint %d out of limits: %f not in [%f, %f]",
-                              getName().c_str(), i, q(i), qMin(i), qMax(i));
-            return false;
-        }
-    }
-
-    return true;
-}
-
 bool ArmController::checkReturnCode(int ret)
 {
+    if (ret == KDL::SolverI::E_NOERROR)
+    {
+        return true;
+    }
+
+    int code;
+
     switch (ret)
     {
     case KDL::ChainIkSolverVel_pinv::E_CONVERGE_PINV_SINGULAR:
         ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Convergence issue: pseudo-inverse is singular", getName().c_str());
-        return false;
+        code = JointPositions::CMD_SINGULARITY;
+        break;
     case KDL::SolverI::E_SVD_FAILED:
         ROS_ERROR_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Convergence issue: SVD failed", getName().c_str());
-        return false;
-    case KDL::SolverI::E_NOERROR:
-        return true;
+        code = JointPositions::CMD_CONVERGENCE;
+        break;
     default:
         ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Convergence issue: unknown error", getName().c_str());
-        return false;
+        code = JointPositions::CMD_UNKNOWN_ERROR;
+        break;
     }
+
+    if (status == JointPositions::CMD_OK || status > code)
+    {
+        status = code;
+    }
+
+    return false;
 }
 
-// don't remove the `tiago_controllers` namespace here
-PLUGINLIB_EXPORT_CLASS(tiago_controllers::ArmController, controller_interface::ControllerBase);
+// don't remove the `tiago_telepresence_controllers` namespace here
+PLUGINLIB_EXPORT_CLASS(tiago_telepresence_controllers::ArmController, controller_interface::ControllerBase);
