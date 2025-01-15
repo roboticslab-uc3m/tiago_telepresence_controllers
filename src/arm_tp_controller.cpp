@@ -55,7 +55,7 @@ protected:
     std::vector<double> convertToVector(const KDL::JntArray & q, const KDL::Frame & H_0_N, double period) override;
 
 private:
-    void checkReturnCode(int ret);
+    bool checkReturnCode(int ret);
 
     KDL::Chain chain;
     KDL::ChainFkSolverPos_recursive * fkSolverPos {nullptr};
@@ -156,20 +156,37 @@ std::vector<double> ArmController::convertToVector(const KDL::JntArray & q_real,
     const auto twist = H_0_N_prev.M * KDL::diff(H_0_N_prev, H_0_N, period);
 
     KDL::JntArray qdot(q.rows());
-    checkReturnCode(ikSolverVel->CartToJnt(q, twist, qdot));
+
+    if (!checkReturnCode(ikSolverVel->CartToJnt(q, twist, qdot)))
+    {
+        ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Stored configuration is singular, will attempt to move anyway", getName().c_str());
+    }
+
+    // look ahead in case the desired motion would place us in a singular point
+    KDL::JntArray q_temp(q);
 
     for (int i = 0; i < q.rows(); i++)
     {
-        q(i) += qdot(i) * period;
+        q_temp(i) += qdot(i) * period;
     }
 
-    H_0_N_prev = H_0_N;
+    if (checkReturnCode(ikSolverVel->CartToJnt(q_temp, twist, qdot)))
+    {
+        // no singular point, so update the calculated joint configuration and pose
+        q = q_temp;
+        H_0_N_prev = H_0_N;
+    }
 
     return kdlToJointVector(q);
 }
 
-void ArmController::checkReturnCode(int ret)
+bool ArmController::checkReturnCode(int ret)
 {
+    if (ret == KDL::SolverI::E_NOERROR)
+    {
+        return true;
+    }
+
     int code;
 
     switch (ret)
@@ -182,18 +199,18 @@ void ArmController::checkReturnCode(int ret)
         ROS_ERROR_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Convergence issue: SVD failed", getName().c_str());
         code = JointPositions::CMD_CONVERGENCE;
         break;
-    case KDL::SolverI::E_NOERROR:
-        return;
     default:
         ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Convergence issue: unknown error", getName().c_str());
         code = JointPositions::CMD_UNKNOWN_ERROR;
-        return;
+        break;
     }
 
     if (status == JointPositions::CMD_OK || status > code)
     {
         status = code;
     }
+
+    return false;
 }
 
 // don't remove the `tiago_telepresence_controllers` namespace here
