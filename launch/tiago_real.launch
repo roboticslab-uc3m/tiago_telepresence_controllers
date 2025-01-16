@@ -3,6 +3,7 @@
 <launch>
     <arg name="tcp_ip" default="10.68.0.1"/>
     <arg name="tcp_port" default="10000"/>
+    <arg name="motion" default=""/>
     <arg name="audio" default="true"/>
 
     <include file="$(find ros_tcp_endpoint)/launch/endpoint.launch">
@@ -11,6 +12,7 @@
     </include>
 
     <include file="$(find tiago_telepresence_controllers)/launch/telepresence_controllers.launch">
+        <arg name="motion" value="$(arg motion)"/>
     </include>
 
     <include file="$(find tiago_telepresence_controllers)/launch/telepresence_audio.launch" if="$(arg audio)">

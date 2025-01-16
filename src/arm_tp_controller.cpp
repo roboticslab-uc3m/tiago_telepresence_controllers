@@ -1,49 +1,26 @@
 #include "generic_tp_controller.hpp"
 
+#include <atomic>
+
 #include <pluginlib/class_list_macros.h>
-#include <geometry_msgs/Pose.h>
+#include <geometry_msgs/PoseStamped.h>
 
 #include <kdl_parser/kdl_parser.hpp>
-#include <kdl/chain.hpp>
+
 #include <kdl/chainfksolverpos_recursive.hpp>
 #include <kdl/chainiksolvervel_pinv.hpp>
-#include <kdl/frames.hpp>
-#include <kdl/jntarray.hpp>
-#include <kdl/tree.hpp>
 
-constexpr auto UPDATE_LOG_THROTTLE = 1.0; // [s]
+#include "tiago_telepresence_controllers/JointPositions.h"
 
-namespace
-{
-    KDL::JntArray vectorToKdl(const std::vector<double> & q)
-    {
-        KDL::JntArray ret(q.size());
-
-        for (int i = 0; i < q.size(); i++)
-        {
-            ret(i) = q[i];
-        }
-
-        return ret;
-    }
-
-    std::vector<double> kdlToVector(const KDL::JntArray & q)
-    {
-        // https://stackoverflow.com/a/26094702
-        const auto & priv = q.data;
-        return std::vector<double>(priv.data(), priv.data() + priv.rows());
-    }
-}
-
-namespace tiago_controllers
+namespace tiago_telepresence_controllers
 {
 
-class ArmController : public BufferedGenericController<geometry_msgs::Pose>
+class ArmController : public FrameBufferController<geometry_msgs::PoseStamped>
 {
 public:
-    ArmController() : BufferedGenericController("arm") { }
+    ArmController() : FrameBufferController("arm") { }
 
-    ~ArmController()
+    ~ArmController() override
     {
         delete fkSolverPos;
         delete ikSolverVel;
@@ -51,37 +28,59 @@ public:
 
     void onStarting(const std::vector<double> & angles) override
     {
-        q = vectorToKdl(angles);
+        q = jointVectorToKdl(angles);
         fkSolverPos->JntToCart(q, H_0_N_initial);
-        ROS_INFO("Initial position: %f %f %f", H_0_N_initial.p.x(), H_0_N_initial.p.y(), H_0_N_initial.p.z());
+        ROS_INFO("[%s] Initial position: %f %f %f", getName().c_str(), H_0_N_initial.p.x(), H_0_N_initial.p.y(), H_0_N_initial.p.z());
         H_0_N_prev = H_0_N_initial;
-        BufferedGenericController::onStarting(angles);
+        FrameBufferController::onStarting(angles);
+        active = true;
+    }
+
+    void onDisabling() override
+    {
+        active = false;
+        status = JointPositions::CMD_OK;
+    }
+
+    void updateStatus(int & status) override
+    {
+        status = this->status;
+        this->status = JointPositions::CMD_OK;
     }
 
 protected:
-    void processData(const geometry_msgs::Pose& msg) override;
     bool additionalSetup(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n, const std::string &description) override;
+    void processData(const geometry_msgs::PoseStamped& msg) override;
+    KDL::Frame convertToBufferType(const std::vector<double> & v) override;
+    std::vector<double> convertToVector(const KDL::JntArray & q, const KDL::Frame & H_0_N, double period) override;
 
 private:
-    static bool checkReturnCode(int ret);
+    bool checkReturnCode(int ret);
 
     KDL::Chain chain;
     KDL::ChainFkSolverPos_recursive * fkSolverPos {nullptr};
     KDL::ChainIkSolverVel_pinv * ikSolverVel {nullptr};
+
     KDL::Frame H_0_N_initial;
     KDL::Frame H_0_N_prev;
+
     KDL::JntArray q;
+
+    std::atomic_bool active {false};
+    std::atomic_int32_t status {JointPositions::CMD_OK};
 };
 
-} // namespace tiago_controllers
+} // namespace tiago_telepresence_controllers
 
-bool tiago_controllers::ArmController::additionalSetup(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n, const std::string &description)
+using namespace tiago_telepresence_controllers;
+
+bool ArmController::additionalSetup(hardware_interface::PositionJointInterface* hw, ros::NodeHandle &n, const std::string &description)
 {
     KDL::Tree tree;
 
     if (!kdl_parser::treeFromString(description, tree))
     {
-        ROS_ERROR("Failed to construct KDL tree");
+        ROS_ERROR("[%s] Failed to construct KDL tree", getName().c_str());
         return false;
     }
 
@@ -89,123 +88,132 @@ bool tiago_controllers::ArmController::additionalSetup(hardware_interface::Posit
 
     if (!n.getParam("start_link", start_link))
     {
-        ROS_ERROR("Could not find start_link parameter");
+        ROS_ERROR("[%s] Could not find start_link parameter", getName().c_str());
         return false;
     }
 
     if (!n.getParam("end_link", end_link))
     {
-        ROS_ERROR("Could not find end_link parameter");
+        ROS_ERROR("[%s] Could not find end_link parameter", getName().c_str());
         return false;
     }
 
     if (!tree.getChain(start_link, end_link, chain))
     {
-        ROS_ERROR("Failed to get chain from kdl tree");
+        ROS_ERROR("[%s] Failed to get chain from kdl tree", getName().c_str());
         return false;
     }
 
-    ROS_INFO("Got chain with %d joints and %d segments", chain.getNrOfJoints(), chain.getNrOfSegments());
+    ROS_INFO("[%s] Got chain with %d joints and %d segments", getName().c_str(), chain.getNrOfJoints(), chain.getNrOfSegments());
 
-    double eps;
-    int maxIter;
+    double epsVel;
+    int maxIterVel;
 
-    if (!n.getParam("ik_solver_vel_eps", eps))
+    if (!n.getParam("ik_solver_vel_eps", epsVel))
     {
-        ROS_ERROR("Could not find ik_solver_vel_eps parameter");
+        ROS_ERROR("[%s] Could not find ik_solver_vel_eps parameter", getName().c_str());
         return false;
     }
 
-    if (!n.getParam("ik_solver_vel_max_iter", maxIter))
+    if (!n.getParam("ik_solver_vel_max_iter", maxIterVel))
     {
-        ROS_ERROR("Could not find ik_solver_vel_max_iter parameter");
+        ROS_ERROR("[%s] Could not find ik_solver_vel_max_iter parameter", getName().c_str());
         return false;
     }
 
     fkSolverPos = new KDL::ChainFkSolverPos_recursive(chain);
-    ikSolverVel = new KDL::ChainIkSolverVel_pinv(chain, eps, maxIter);
+    ikSolverVel = new KDL::ChainIkSolverVel_pinv(chain, epsVel, maxIterVel);
 
-    return true;
+    return FrameBufferController::additionalSetup(hw, n, description);
 }
 
-void tiago_controllers::ArmController::processData(const geometry_msgs::Pose& msg)
+void ArmController::processData(const geometry_msgs::PoseStamped& msg)
 {
-    const auto period = getCommandPeriod();
-
-    if (period == 0.0)
+    if (active)
     {
-        accept(kdlToVector(q));
-        return;
+        // change in pose between initial and desired, referred to the TCP on its initial pose
+        KDL::Frame H_N(
+            KDL::Rotation::Quaternion(msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w),
+            KDL::Vector(msg.pose.position.x, msg.pose.position.y, msg.pose.position.z)
+        );
+
+        auto H_0_N = H_0_N_initial * H_N;
+        accept(H_0_N, msg.header.stamp);
     }
+}
 
-    // change in pose between initial and desired, referred to the TCP
-    KDL::Frame H_N(
-        KDL::Rotation::Quaternion(msg.orientation.x, msg.orientation.y, msg.orientation.z, msg.orientation.w),
-        KDL::Vector(msg.position.x, msg.position.y, msg.position.z)
-    );
+KDL::Frame ArmController::convertToBufferType(const std::vector<double> & v)
+{
+    const auto q = jointVectorToKdl(v);
+    KDL::Frame H;
+    fkSolverPos->JntToCart(q, H);
+    return H;
+}
 
-    auto H_0_N_desired = H_0_N_initial * H_N;
-    auto twist = KDL::diff(H_0_N_prev, H_0_N_desired, period);
-
-    // refer to base frame, but leave the reference point intact
-    twist = H_0_N_initial.M * twist;
+std::vector<double> ArmController::convertToVector(const KDL::JntArray & q_real, const KDL::Frame & H_0_N, double period)
+{
+    // refer to base frame, but leave the reference point intact;
+    // using H_O_N_initial instead of H_0_N_prev for some reason the original author once knew
+    // and now forgot, but hey, it seems to work better this way
+    const auto twist = H_0_N_initial.M * KDL::diff(H_0_N_prev, H_0_N, period);
 
     KDL::JntArray qdot(q.rows());
 
     if (!checkReturnCode(ikSolverVel->CartToJnt(q, twist, qdot)))
     {
-        ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "Could not calculate joint velocities (1)");
-        accept(kdlToVector(q));
-        return;
+        ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Stored configuration is singular, will attempt to move anyway", getName().c_str());
     }
 
-    const auto & limits = getJointLimits();
-    auto q_temp = q;
+    // look ahead in case the desired motion would place us in a singular point
+    KDL::JntArray q_temp(q);
 
-    for (int i = 0; i < q_temp.rows(); i++)
+    for (int i = 0; i < q.rows(); i++)
     {
         q_temp(i) += qdot(i) * period;
-
-        if (q_temp(i) < limits[i].first || q_temp(i) > limits[i].second)
-        {
-            ROS_WARN("Joint %d out of limits: %f not in [%f, %f]", i, q_temp(i), limits[i].first, limits[i].second);
-            accept(kdlToVector(q));
-            return;
-        }
     }
 
-    KDL::JntArray qdot_temp(chain.getNrOfJoints());
-
-    if (!checkReturnCode(ikSolverVel->CartToJnt(q_temp, twist, qdot_temp)))
+    if (checkReturnCode(ikSolverVel->CartToJnt(q_temp, twist, qdot)))
     {
-        ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "Could not calculate joint velocities (2)");
-        accept(kdlToVector(q));
-        return;
+        // no singular point, so update the calculated joint configuration and pose
+        q = q_temp;
+        H_0_N_prev = H_0_N;
     }
 
-    // no singular point, so update the calculated pose and joint values
-    H_0_N_prev = H_0_N_desired;
-    q = q_temp;
-
-    accept(kdlToVector(q));
+    return kdlToJointVector(q);
 }
 
-bool tiago_controllers::ArmController::checkReturnCode(int ret)
+bool ArmController::checkReturnCode(int ret)
 {
+    if (ret == KDL::SolverI::E_NOERROR)
+    {
+        return true;
+    }
+
+    int code;
+
     switch (ret)
     {
     case KDL::ChainIkSolverVel_pinv::E_CONVERGE_PINV_SINGULAR:
-        ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "Convergence issue: pseudo-inverse is singular");
-        return false;
+        ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Convergence issue: pseudo-inverse is singular", getName().c_str());
+        code = JointPositions::CMD_SINGULARITY;
+        break;
     case KDL::SolverI::E_SVD_FAILED:
-        ROS_ERROR_THROTTLE(UPDATE_LOG_THROTTLE, "Convergence issue: SVD failed");
-        return false;
-    case KDL::SolverI::E_NOERROR:
-        return true;
+        ROS_ERROR_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Convergence issue: SVD failed", getName().c_str());
+        code = JointPositions::CMD_CONVERGENCE;
+        break;
     default:
-        ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "Convergence issue: unknown error");
-        return false;
+        ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Convergence issue: unknown error", getName().c_str());
+        code = JointPositions::CMD_UNKNOWN_ERROR;
+        break;
     }
+
+    if (status == JointPositions::CMD_OK || status > code)
+    {
+        status = code;
+    }
+
+    return false;
 }
 
-PLUGINLIB_EXPORT_CLASS(tiago_controllers::ArmController, controller_interface::ControllerBase);
+// don't remove the `tiago_telepresence_controllers` namespace here
+PLUGINLIB_EXPORT_CLASS(tiago_telepresence_controllers::ArmController, controller_interface::ControllerBase);

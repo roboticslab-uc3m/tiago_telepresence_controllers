@@ -1,78 +1,68 @@
 #include "command_buffer.hpp"
 
-const ros::Duration CommandBuffer::COMMAND_TIMEOUT = ros::Duration(1.0); // seconds
+#include <kdl/path_line.hpp>
+#include <kdl/rotational_interpolation_sa.hpp>
+#include <kdl/trajectory_segment.hpp>
+#include <kdl/velocityprofile_rect.hpp>
 
 // -----------------------------------------------------------------------------
 
-void CommandBuffer::accept(const std::vector<double> & command)
+void JointCommandBuffer::update()
 {
-    const auto now = ros::Time::now();
-    commandPeriod = now - commandTimestamp;
-    commandTimestamp = now;
-    storedCommand = command;
+    const auto dt = (right->second - left->second).toSec();
+
+    for (auto i = 0; i < slopes.size(); i++)
+    {
+        slopes[i] = dt != 0.0 ? (right->first(i) - left->first(i)) / dt : 0.0;
+    }
 }
 
 // -----------------------------------------------------------------------------
 
-std::vector<double> CommandBuffer::interpolate()
+KDL::JntArray JointCommandBuffer::interpolateInternal(double t)
 {
-    const auto now = ros::Time::now();
-    const auto nextExpectedCommandTimestamp = commandTimestamp + commandPeriod;
-    const auto interpolationPeriod = now - interpolationTimestamp;
+    auto out = left->first;
 
-    if (now > nextExpectedCommandTimestamp || commandPeriod > COMMAND_TIMEOUT)
+    for (auto i = 0; i < slopes.size(); i++)
     {
-        // cond. 1: the next command was skipped, it didn't arrive on time or none was received yet
-        // cond. 2: the last command was received too long ago, perhaps it was a single step command?
-        // in either case, we don't interpolate and just process the last received command (again)
-        interpolationResult = storedCommand;
-    }
-    else
-    {
-        // note that `interpolationTimestamp` is equal to the `now` value of the previous iteration,
-        // hence the reaching of `storedCommand` will be delayed (resulting in a softer slope)
-        const auto dt = nextExpectedCommandTimestamp - interpolationTimestamp;
-        const auto factor = interpolationPeriod.toSec() / dt.toSec();
-
-        interpolationResult.resize(storedCommand.size());
-
-        for (size_t i = 0; i < storedCommand.size(); i++)
-        {
-            // having y = f(t): f(t+T) = f(t) + T * (delta_y / delta_t)
-            interpolationResult[i] += factor * (storedCommand[i] - interpolationResult[i]);
-        }
+        // having y = f(t): f(t+T) = f(t) + T * (delta_y / delta_t)
+        out(i) += t * slopes[i];
     }
 
-    interpolationTimestamp = now;
-    return interpolationResult;
+    return out;
 }
 
 // -----------------------------------------------------------------------------
 
-std::vector<double> CommandBuffer::getStoredCommand(ros::Time * timestamp) const
+void JointCommandBuffer::resetInternal()
 {
-    if (timestamp)
-    {
-        *timestamp = commandTimestamp;
-    }
-
-    return storedCommand;
+    slopes.assign(slopes.size(), 0.0);
 }
 
 // -----------------------------------------------------------------------------
 
-ros::Duration CommandBuffer::getCommandPeriod() const
+void FrameCommandBuffer::update()
 {
-    return commandPeriod;
+    auto duration = (right->second - left->second).toSec();
+    auto speed = (right->first.p - left->first.p).Norm() / duration;
+    auto * orient = new KDL::RotationalInterpolation_SingleAxis();
+    auto * path = new KDL::Path_Line(left->first, right->first, orient, 0.001);
+    auto * profile = new KDL::VelocityProfile_Rectangular(speed);
+    trajectory = std::make_unique<KDL::Trajectory_Segment>(path, profile, duration);
 }
 
 // -----------------------------------------------------------------------------
 
-void CommandBuffer::reset(const std::vector<double> & initialCommand)
+KDL::Frame FrameCommandBuffer::interpolateInternal(double t)
 {
-    storedCommand = interpolationResult = initialCommand;
-    commandPeriod = ros::Duration();
-    commandTimestamp = interpolationTimestamp = ros::Time::now();
+    return trajectory->Pos(t);
+}
+
+// -----------------------------------------------------------------------------
+
+void FrameCommandBuffer::resetInternal()
+{
+    trajectory.reset();
 }
 
 // -----------------------------------------------------------------------------
