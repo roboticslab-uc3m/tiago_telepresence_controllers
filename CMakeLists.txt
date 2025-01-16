@@ -16,6 +16,11 @@ find_package(catkin REQUIRED COMPONENTS
 
 find_package(orocos_kdl REQUIRED)
 
+add_message_files(
+    FILES
+    JointPositions.msg
+)
+
 add_service_files(
     FILES
     ArmMotion.srv

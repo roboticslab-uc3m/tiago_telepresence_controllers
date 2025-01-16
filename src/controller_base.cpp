@@ -1,10 +1,14 @@
 #include "controller_base.hpp"
 
 #include <algorithm> // std::max, std::min
+
+#include <ros/console.h>
 #include <urdf/model.h>
 #include <std_msgs/Float32MultiArray.h>
 
-using namespace tiago_controllers;
+#include "tiago_telepresence_controllers/JointPositions.h"
+
+using namespace tiago_telepresence_controllers;
 
 constexpr auto INPUT_TIMEOUT = 0.25; // [s]
 
@@ -50,26 +54,38 @@ bool ControllerBase::init(hardware_interface::PositionJointInterface* hw, ros::N
         jointLimits.emplace_back(joint->limits->lower, joint->limits->upper);
     }
 
+    {
+        double statePublishThrottleDouble;
+
+        if (n.getParam("state_publish_throttle", statePublishThrottleDouble))
+        {
+            statePublishThrottle.fromSec(statePublishThrottleDouble);
+        }
+    }
+
     registerSubscriber(n, sub);
     registerPublisher(n, pub);
 
-    std::vector<double> initial(joints.size());
-    std::string out;
-
-    for (int i = 0; i < joints.size(); i++)
     {
-        initial[i] = joints[i].getPosition();
-        out += " " + std::to_string(initial[i]);
-    }
+        std::string out;
 
-    ROS_INFO("Initial joint configuration for %s:%s", name.c_str(), out.c_str());
+        for (const auto & joint : joints)
+        {
+            out += " " + std::to_string(joint.getPosition());
+        }
+
+        ROS_INFO("Initial joint configuration for %s:%s", name.c_str(), out.c_str());
+    }
 
     return additionalSetup(hw, n, robot_desc_string);
 }
 
 void ControllerBase::registerPublisher(ros::NodeHandle &n, ros::Publisher &pub)
 {
-    pub = n.advertise<std_msgs::Float32MultiArray>("state", 1);
+    if (!statePublishThrottle.isZero())
+    {
+        pub = n.advertise<JointPositions>("state", 1);
+    }
 }
 
 void ControllerBase::updateStamp()
@@ -88,17 +104,12 @@ void ControllerBase::update(const ros::Time& time, const ros::Duration& period)
 {
     static const ros::Duration timeout(INPUT_TIMEOUT);
 
-    std_msgs::Float32MultiArray msg;
-    std::vector<double> current;
+    JointPositions msg;
 
     for (const auto & joint : joints)
     {
-        const auto position = joint.getPosition();
-        msg.data.push_back(position);
-        current.push_back(position);
+        msg.positions.push_back(joint.getPosition());
     }
-
-    pub.publish(msg);
 
     if (time - getLastStamp() > timeout)
     {
@@ -107,22 +118,49 @@ void ControllerBase::update(const ros::Time& time, const ros::Duration& period)
             isActive = false;
             onDisabling();
         }
-
-        return;
     }
-    else if (!isActive)
+    else
     {
-        isActive = true;
-        onStarting(current);
+        if (!isActive)
+        {
+            isActive = true;
+            onStarting(msg.positions);
+        }
+
+        const auto desired = getDesiredJointValues(msg.positions, period.toSec());
+
+        for (int i = 0; i < joints.size(); i++)
+        {
+            const auto & limits = jointLimits[i];
+            auto cmd = desired[i];
+
+            if (cmd < limits.first || cmd > limits.second)
+            {
+                ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Joint %d out of limits: %f not in [%f, %f]",
+                                  getName().c_str(), i, cmd, limits.first, limits.second);
+
+                cmd = std::max(limits.first, std::min(limits.second, cmd));
+                notifyOutOfLimits = true;
+            }
+
+            joints[i].setCommand(cmd);
+        }
     }
 
-    const auto desired = getDesiredJointValues(current);
-
-    for (int i = 0; i < joints.size(); i++)
+    if (!statePublishThrottle.isZero() && time - lastStatePublish > statePublishThrottle)
     {
-        const auto & limits = jointLimits[i];
-        const auto cmd = std::max(limits.first, std::min(limits.second, desired[i]));
+        if (isActive)
+        {
+            updateStatus(msg.status);
 
-        joints[i].setCommand(cmd);
+            if (notifyOutOfLimits)
+            {
+                msg.status = JointPositions::CMD_OUT_OF_LIMITS;
+                notifyOutOfLimits = false;
+            }
+        }
+
+        pub.publish(msg);
+        lastStatePublish = time;
     }
 }

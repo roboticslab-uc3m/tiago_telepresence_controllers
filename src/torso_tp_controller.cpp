@@ -3,13 +3,13 @@
 #include <pluginlib/class_list_macros.h>
 #include <std_msgs/Int32.h>
 
-namespace tiago_controllers
+namespace tiago_telepresence_controllers
 {
 
-class TorsoController : public StepperGenericController<std_msgs::Int32>
+class TorsoController : public StepperController<std_msgs::Int32>
 {
 public:
-    TorsoController() : StepperGenericController("torso") { }
+    TorsoController() : StepperController("torso") { }
 
 protected:
     void processData(const std_msgs::Int32& msg) override
@@ -18,6 +18,6 @@ protected:
     }
 };
 
-} // namespace tiago_controllers
+} // namespace tiago_telepresence_controllers
 
-PLUGINLIB_EXPORT_CLASS(tiago_controllers::TorsoController, controller_interface::ControllerBase);
+PLUGINLIB_EXPORT_CLASS(tiago_telepresence_controllers::TorsoController, controller_interface::ControllerBase);
