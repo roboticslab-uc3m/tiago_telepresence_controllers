@@ -8,8 +8,8 @@
 #include <kdl_parser/kdl_parser.hpp>
 
 #include <kdl/chainfksolverpos_recursive.hpp>
-#include <kdl/chainiksolvervel_pinv.hpp>
 
+#include "st/chainiksolverpos_st.hpp"
 #include "tiago_telepresence_controllers/JointPositions.h"
 
 namespace tiago_telepresence_controllers
@@ -23,15 +23,13 @@ public:
     ~ArmController() override
     {
         delete fkSolverPos;
-        delete ikSolverVel;
+        delete ikSolverPos;
     }
 
     void onStarting(const std::vector<double> & angles) override
     {
-        q = jointVectorToKdl(angles);
-        fkSolverPos->JntToCart(q, H_0_N_initial);
+        fkSolverPos->JntToCart(jointVectorToKdl(angles), H_0_N_initial);
         ROS_INFO("[%s] Initial position: %f %f %f", getName().c_str(), H_0_N_initial.p.x(), H_0_N_initial.p.y(), H_0_N_initial.p.z());
-        H_0_N_prev = H_0_N_initial;
         FrameBufferController::onStarting(angles);
         active = true;
     }
@@ -57,14 +55,10 @@ protected:
 private:
     bool checkReturnCode(int ret);
 
+    KDL::Frame H_0_N_initial;
     KDL::Chain chain;
     KDL::ChainFkSolverPos_recursive * fkSolverPos {nullptr};
-    KDL::ChainIkSolverVel_pinv * ikSolverVel {nullptr};
-
-    KDL::Frame H_0_N_initial;
-    KDL::Frame H_0_N_prev;
-
-    KDL::JntArray q;
+    ChainIkSolverPos_ST * ikSolverPos {nullptr};
 
     std::atomic_bool active {false};
     std::atomic_int32_t status {JointPositions::CMD_OK};
@@ -106,23 +100,21 @@ bool ArmController::additionalSetup(hardware_interface::PositionJointInterface* 
 
     ROS_INFO("[%s] Got chain with %d joints and %d segments", getName().c_str(), chain.getNrOfJoints(), chain.getNrOfSegments());
 
-    double epsVel;
-    int maxIterVel;
+    KDL::JntArray qMin, qMax;
 
-    if (!n.getParam("ik_solver_vel_eps", epsVel))
-    {
-        ROS_ERROR("[%s] Could not find ik_solver_vel_eps parameter", getName().c_str());
-        return false;
-    }
+    const auto & limits = getJointLimits();
 
-    if (!n.getParam("ik_solver_vel_max_iter", maxIterVel))
+    qMin.resize(limits.size());
+    qMax.resize(limits.size());
+
+    for (auto i = 0; i < limits.size(); i++)
     {
-        ROS_ERROR("[%s] Could not find ik_solver_vel_max_iter parameter", getName().c_str());
-        return false;
+        qMin(i) = limits[i].first;
+        qMax(i) = limits[i].second;
     }
 
     fkSolverPos = new KDL::ChainFkSolverPos_recursive(chain);
-    ikSolverVel = new KDL::ChainIkSolverVel_pinv(chain, epsVel, maxIterVel);
+    ikSolverPos = new ChainIkSolverPos_ST(chain, qMin, qMax);
 
     return FrameBufferController::additionalSetup(hw, n, description);
 }
@@ -144,42 +136,16 @@ void ArmController::processData(const geometry_msgs::PoseStamped& msg)
 
 KDL::Frame ArmController::convertToBufferType(const std::vector<double> & v)
 {
-    const auto q = jointVectorToKdl(v);
     KDL::Frame H;
-    fkSolverPos->JntToCart(q, H);
+    fkSolverPos->JntToCart(jointVectorToKdl(v), H);
     return H;
 }
 
 std::vector<double> ArmController::convertToVector(const KDL::JntArray & q_real, const KDL::Frame & H_0_N, double period)
 {
-    // refer to base frame, but leave the reference point intact;
-    // using H_O_N_initial instead of H_0_N_prev for some reason the original author once knew
-    // and now forgot, but hey, it seems to work better this way
-    const auto twist = H_0_N_initial.M * KDL::diff(H_0_N_prev, H_0_N, period);
-
-    KDL::JntArray qdot(q.rows());
-
-    if (!checkReturnCode(ikSolverVel->CartToJnt(q, twist, qdot)))
-    {
-        ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Stored configuration is singular, will attempt to move anyway", getName().c_str());
-    }
-
-    // look ahead in case the desired motion would place us in a singular point
-    KDL::JntArray q_temp(q);
-
-    for (int i = 0; i < q.rows(); i++)
-    {
-        q_temp(i) += qdot(i) * period;
-    }
-
-    if (checkReturnCode(ikSolverVel->CartToJnt(q_temp, twist, qdot)))
-    {
-        // no singular point, so update the calculated joint configuration and pose
-        q = q_temp;
-        H_0_N_prev = H_0_N;
-    }
-
-    return kdlToJointVector(q);
+    KDL::JntArray qd; // its size is set by our solver
+    checkReturnCode(ikSolverPos->CartToJnt(q_real, H_0_N, qd));
+    return kdlToJointVector(qd);
 }
 
 bool ArmController::checkReturnCode(int ret)
@@ -193,16 +159,16 @@ bool ArmController::checkReturnCode(int ret)
 
     switch (ret)
     {
-    case KDL::ChainIkSolverVel_pinv::E_CONVERGE_PINV_SINGULAR:
-        ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Convergence issue: pseudo-inverse is singular", getName().c_str());
-        code = JointPositions::CMD_SINGULARITY;
+    case ChainIkSolverPos_ST::E_OUT_OF_LIMITS:
+        ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Solver solution out of joint limits", getName().c_str());
+        code = JointPositions::CMD_OUT_OF_LIMITS;
         break;
-    case KDL::SolverI::E_SVD_FAILED:
-        ROS_ERROR_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Convergence issue: SVD failed", getName().c_str());
-        code = JointPositions::CMD_CONVERGENCE;
+    case ChainIkSolverPos_ST::E_NOT_REACHABLE:
+        ROS_ERROR_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Solver solution out of reachable space", getName().c_str());
+        code = JointPositions::CMD_UNREACHABLE;
         break;
     default:
-        ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Convergence issue: unknown error", getName().c_str());
+        ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Unknown solver error", getName().c_str());
         code = JointPositions::CMD_UNKNOWN_ERROR;
         break;
     }
