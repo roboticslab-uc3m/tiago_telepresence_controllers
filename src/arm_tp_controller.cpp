@@ -53,7 +53,7 @@ protected:
     std::vector<double> convertToVector(const KDL::JntArray & q, const KDL::Frame & H_0_N, double period) override;
 
 private:
-    bool checkReturnCode(int ret);
+    void checkReturnCode(int ret);
 
     KDL::Frame H_0_N_initial;
     KDL::Chain chain;
@@ -100,21 +100,8 @@ bool ArmController::additionalSetup(hardware_interface::PositionJointInterface* 
 
     ROS_INFO("[%s] Got chain with %d joints and %d segments", getName().c_str(), chain.getNrOfJoints(), chain.getNrOfSegments());
 
-    KDL::JntArray qMin, qMax;
-
-    const auto & limits = getJointLimits();
-
-    qMin.resize(limits.size());
-    qMax.resize(limits.size());
-
-    for (auto i = 0; i < limits.size(); i++)
-    {
-        qMin(i) = limits[i].first;
-        qMax(i) = limits[i].second;
-    }
-
     fkSolverPos = new KDL::ChainFkSolverPos_recursive(chain);
-    ikSolverPos = new ChainIkSolverPos_ST(chain, qMin, qMax);
+    ikSolverPos = new ChainIkSolverPos_ST(chain);
 
     return FrameBufferController::additionalSetup(hw, n, description);
 }
@@ -141,44 +128,24 @@ KDL::Frame ArmController::convertToBufferType(const std::vector<double> & v)
     return H;
 }
 
-std::vector<double> ArmController::convertToVector(const KDL::JntArray & q_real, const KDL::Frame & H_0_N, double period)
+std::vector<double> ArmController::convertToVector(const KDL::JntArray & q, const KDL::Frame & H_0_N, double period)
 {
     KDL::JntArray qd; // its size is set by our solver
-    checkReturnCode(ikSolverPos->CartToJnt(q_real, H_0_N, qd));
+    checkReturnCode(ikSolverPos->CartToJnt(q, H_0_N, qd));
     return kdlToJointVector(qd);
 }
 
-bool ArmController::checkReturnCode(int ret)
+void ArmController::checkReturnCode(int ret)
 {
-    if (ret == KDL::SolverI::E_NOERROR)
+    if (ret == ChainIkSolverPos_ST::E_NOT_REACHABLE)
     {
-        return true;
-    }
-
-    int code;
-
-    switch (ret)
-    {
-    case ChainIkSolverPos_ST::E_OUT_OF_LIMITS:
-        ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Solver solution out of joint limits", getName().c_str());
-        code = JointPositions::CMD_OUT_OF_LIMITS;
-        break;
-    case ChainIkSolverPos_ST::E_NOT_REACHABLE:
         ROS_ERROR_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Solver solution out of reachable space", getName().c_str());
-        code = JointPositions::CMD_UNREACHABLE;
-        break;
-    default:
-        ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Unknown solver error", getName().c_str());
-        code = JointPositions::CMD_UNKNOWN_ERROR;
-        break;
-    }
 
-    if (status == JointPositions::CMD_OK || status > code)
-    {
-        status = code;
+        if (status == JointPositions::CMD_OK || status > JointPositions::CMD_UNREACHABLE)
+        {
+            status = JointPositions::CMD_UNREACHABLE;
+        }
     }
-
-    return false;
 }
 
 // don't remove the `tiago_telepresence_controllers` namespace here

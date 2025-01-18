@@ -37,9 +37,9 @@ namespace
 
 // -----------------------------------------------------------------------------
 
-ChainIkSolverPos_ST::ChainIkSolverPos_ST(const KDL::Chain & chain, const KDL::JntArray & q_min, const KDL::JntArray & q_max)
+ChainIkSolverPos_ST::ChainIkSolverPos_ST(const KDL::Chain & chain)
     : problem(buildProblem(PoeExpression::fromChain(chain))),
-      selector(new ConfigurationSelectorLeastOverallAngularDisplacement(q_min, q_max))
+      selector(new TiagoConfigurationSelector)
 {}
 
 // -----------------------------------------------------------------------------
@@ -49,16 +49,8 @@ int ChainIkSolverPos_ST::CartToJnt(const KDL::JntArray & q_init, const KDL::Fram
     std::vector<KDL::JntArray> solutions;
     bool ret = problem->solve(p_in, solutions);
 
-    if (!selector->configure(solutions))
-    {
-        return (error = E_OUT_OF_LIMITS);
-    }
-
-    if (!selector->findOptimalConfiguration(q_init))
-    {
-        return (error = E_OUT_OF_LIMITS);
-    }
-
+    selector->configure(solutions);
+    selector->findOptimalConfiguration(q_init);
     selector->retrievePose(q_out);
 
     return (error = ret ? E_NOERROR : E_NOT_REACHABLE);
@@ -70,8 +62,6 @@ const char * ChainIkSolverPos_ST::strError(int error) const
 {
     switch (error)
     {
-    case E_OUT_OF_LIMITS:
-        return "Target pose out of joint limits";
     case E_NOT_REACHABLE:
         return "IK solution not reachable";
     default:

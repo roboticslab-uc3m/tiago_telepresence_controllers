@@ -13,12 +13,11 @@
 class ChainIkSolverPos_ST : public KDL::ChainIkSolverPos
 {
 public:
-    ChainIkSolverPos_ST(const KDL::Chain & chain, const KDL::JntArray & q_min, const KDL::JntArray & q_max);
+    ChainIkSolverPos_ST(const KDL::Chain & chain);
     int CartToJnt(const KDL::JntArray & q_init, const KDL::Frame & p_in, KDL::JntArray & q_out) override;
     void updateInternalDataStructures() override {}
     const char * strError(int error) const override;
 
-    static constexpr int E_OUT_OF_LIMITS = -100;
     static constexpr int E_NOT_REACHABLE = 100;
 
 private:
