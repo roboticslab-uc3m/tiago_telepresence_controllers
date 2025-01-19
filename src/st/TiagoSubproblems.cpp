@@ -10,6 +10,35 @@ using namespace roboticslab;
 
 // -----------------------------------------------------------------------------
 
+TiagoOne::TiagoOne(const MatrixExponential & _exp, const KDL::Vector & _p, const KDL::Frame & _H_ST_0, const KDL::Frame & _H_0_N_init, double _theta)
+    : exp(_exp),
+      axisPow(vectorPow2(exp.getAxis())),
+      u(_p - exp.getOrigin()),
+      u_p(u - axisPow * u),
+      H_ST_0(_H_ST_0)
+{
+    Solutions solutions;
+    solve(_H_0_N_init * H_ST_0.Inverse(), KDL::Frame(), solutions);
+    initialSolution = solutions[0][0];
+    offset = _theta - initialSolution;
+}
+
+// -----------------------------------------------------------------------------
+
+bool TiagoOne::solve(const KDL::Frame & rhs, const KDL::Frame & pointTransform, Solutions & solutions) const
+{
+    KDL::Vector k = (rhs * H_ST_0).p; // = H_noap.p
+    KDL::Vector v = k - exp.getOrigin();
+    KDL::Vector v_p = v - axisPow * v;
+
+    double theta = std::atan2(KDL::dot(exp.getAxis(), u_p * v_p), KDL::dot(u_p, v_p));
+    solutions = {{normalizeAngle(theta + offset)}};
+
+    return true; // always assume reachable
+}
+
+// -----------------------------------------------------------------------------
+
 PadenKahanOne::PadenKahanOne(const MatrixExponential & _exp, const KDL::Vector & _p)
     : exp(_exp),
       p(_p),

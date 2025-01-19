@@ -65,8 +65,18 @@ public:
      */
     virtual void retrievePose(KDL::JntArray & q) const
     {
-        q = *optimalConfig->retrievePose();
+        q = *configs[lastValid].retrievePose();
     }
+
+    /**
+     * @brief Retrieves the index of the last valid solution.
+     *
+     * @return Index of the last valid solution.
+     */
+    int getValidSolutionIndex() const
+    { return lastValid; }
+
+    static constexpr int INVALID_CONFIG = -1;
 
 protected:
     /**
@@ -121,9 +131,8 @@ protected:
 
     KDL::JntArray _qMin, _qMax;
 
-    Configuration * optimalConfig {nullptr};
-
     std::vector<Configuration> configs;
+    int lastValid {INVALID_CONFIG};
 };
 
 /**
@@ -149,8 +158,6 @@ protected:
 
     bool validate(Configuration & config) override
     { return true; }
-
-    bool foundValidConfig {false};
 };
 
 } // namespace roboticslab

@@ -1,6 +1,7 @@
 #include "generic_tp_controller.hpp"
 
 #include <atomic>
+#include <memory>
 
 #include <pluginlib/class_list_macros.h>
 #include <geometry_msgs/PoseStamped.h>
@@ -20,16 +21,14 @@ class ArmController : public FrameBufferController<geometry_msgs::PoseStamped>
 public:
     ArmController() : FrameBufferController("arm") { }
 
-    ~ArmController() override
-    {
-        delete fkSolverPos;
-        delete ikSolverPos;
-    }
-
     void onStarting(const std::vector<double> & angles) override
     {
-        fkSolverPos->JntToCart(jointVectorToKdl(angles), H_0_N_initial);
+        const auto q = jointVectorToKdl(angles);
+        fkSolverPos->JntToCart(q, H_0_N_initial);
         ROS_INFO("[%s] Initial position: %f %f %f", getName().c_str(), H_0_N_initial.p.x(), H_0_N_initial.p.y(), H_0_N_initial.p.z());
+
+        ikSolverPos = std::make_unique<ChainIkSolverPos_ST>(chain, H_0_N_initial, q);
+
         FrameBufferController::onStarting(angles);
         active = true;
     }
@@ -57,8 +56,9 @@ private:
 
     KDL::Frame H_0_N_initial;
     KDL::Chain chain;
-    KDL::ChainFkSolverPos_recursive * fkSolverPos {nullptr};
-    ChainIkSolverPos_ST * ikSolverPos {nullptr};
+
+    std::unique_ptr<KDL::ChainFkSolverPos_recursive> fkSolverPos;
+    std::unique_ptr<ChainIkSolverPos_ST> ikSolverPos;
 
     std::atomic_bool active {false};
     std::atomic_int32_t status {JointPositions::CMD_OK};
@@ -100,8 +100,8 @@ bool ArmController::additionalSetup(hardware_interface::PositionJointInterface* 
 
     ROS_INFO("[%s] Got chain with %d joints and %d segments", getName().c_str(), chain.getNrOfJoints(), chain.getNrOfSegments());
 
-    fkSolverPos = new KDL::ChainFkSolverPos_recursive(chain);
-    ikSolverPos = new ChainIkSolverPos_ST(chain);
+    // the IK solver is created in onStarting()
+    fkSolverPos = std::make_unique<KDL::ChainFkSolverPos_recursive>(chain);
 
     return FrameBufferController::additionalSetup(hw, n, description);
 }
@@ -139,7 +139,7 @@ void ArmController::checkReturnCode(int ret)
 {
     if (ret == ChainIkSolverPos_ST::E_NOT_REACHABLE)
     {
-        ROS_ERROR_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Solver solution out of reachable space", getName().c_str());
+        ROS_WARN_THROTTLE(UPDATE_LOG_THROTTLE, "[%s] Solver solution out of reachable space", getName().c_str());
 
         if (status == JointPositions::CMD_OK || status > JointPositions::CMD_UNREACHABLE)
         {

@@ -13,24 +13,22 @@ using namespace roboticslab;
 
 bool TiagoConfigurationSelector::findOptimalConfiguration(const KDL::JntArray & qGuess)
 {
-    if (!foundValidConfig)
+    if (lastValid == INVALID_CONFIG)
     {
-        using SumToId = std::pair<double, int>;
-        using SetType = std::set<SumToId>;
-        SetType displacementPerConfiguration; // best for all revolute/prismatic joints
+        // best for all revolute/prismatic joints
+        std::set<std::pair<double, int>> displacementPerConfiguration;
 
         for (int i = 0; i < configs.size(); i++)
         {
             auto diffs = getDiffs(qGuess, configs[i]);
             double sum = std::accumulate(diffs.begin(), diffs.end(), 0.0);
-            displacementPerConfiguration.insert(SumToId(sum, i));
+            displacementPerConfiguration.emplace(sum, i);
         }
 
         // std::set keys are sorted, pick std::pair with lowest key (angle sum)
         auto it = displacementPerConfiguration.begin();
 
-        foundValidConfig = true;
-        optimalConfig = &configs[it->second];
+        lastValid = it->second;
     }
 
     return true;

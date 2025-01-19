@@ -14,6 +14,42 @@ namespace roboticslab
 /**
  * @ingroup ScrewTheoryLib
  *
+ * @brief First Paden-Kahan subproblem (modified)
+ *
+ * Single solution, single revolute joint geometric IK subproblem given by
+ * @f$ e\,^{\hat{\xi}\,{\theta}} \cdot p = k @f$
+ * (rotation screw applied to a point).
+ */
+class TiagoOne : public ScrewTheoryIkSubproblem
+{
+public:
+    /**
+     * @brief Constructor
+     *
+     * @param exp POE term.
+     * @param p Characteristic point.
+     */
+    TiagoOne(const MatrixExponential & exp, const KDL::Vector & p, const KDL::Frame & H_ST_0, const KDL::Frame & H_0_N_init, double theta);
+
+    bool solve(const KDL::Frame & rhs, const KDL::Frame & pointTransform, Solutions & solutions) const override;
+
+    int solutions() const override
+    { return 1; }
+
+    const char * describe() const override
+    { return "TIAGO1"; }
+
+private:
+    const MatrixExponential exp;
+    const KDL::Rotation axisPow;
+    const KDL::Vector u, u_p;
+    const KDL::Frame H_ST_0;
+    double initialSolution, offset;
+};
+
+/**
+ * @ingroup ScrewTheoryLib
+ *
  * @brief First Paden-Kahan subproblem
  *
  * Single solution, single revolute joint geometric IK subproblem given by

@@ -2,8 +2,7 @@
 
 #include "chainiksolverpos_st.hpp"
 
-#include <vector>
-
+#include "ConfigurationSelector.hpp"
 #include "TiagoSubproblems.hpp"
 
 using namespace roboticslab;
@@ -31,7 +30,7 @@ namespace
         return L1;
     }
 
-    ScrewTheoryIkProblem * buildProblem(const PoeExpression & poe)
+    ScrewTheoryIkProblem * buildProblem(const PoeExpression & poe, const KDL::Frame & H_0_N_init, const KDL::JntArray & q_init)
     {
         const auto & exp1 = poe.exponentialAtJoint(0);
         const auto & exp2 = poe.exponentialAtJoint(1);
@@ -41,26 +40,39 @@ namespace
         const auto & exp6 = poe.exponentialAtJoint(5);
         const auto & exp7 = poe.exponentialAtJoint(6);
 
-        const auto o = exp1.getOrigin() + exp1.getAxis(); // point on axis 1, but not on axis 7
+        const auto a = exp1.getOrigin(); // point on axis 1 only
         const auto b = findIntersection(exp2, exp3); // intersection of axes 2 and 3
-        const auto d = findIntersection(exp6, exp7); // intersection of axes 6 and 7
+        const auto d = findIntersection(exp6, exp7); // intersection of axes 5, 6 and 7
+        const auto e = exp7.getOrigin() + exp7.getAxis(); // point on axis 7, but not on 5 nor 6
 
         ScrewTheoryIkProblem::Steps steps;
-        steps.emplace_back(std::vector<int>{0}, new PadenKahanOne(exp1, d));
+        steps.emplace_back(std::vector<int>{0}, new TiagoOne(exp1, d, poe.getTransform(), H_0_N_init, q_init(0)));
         steps.emplace_back(std::vector<int>{3}, new PadenKahanThree(exp4, d, b));
         steps.emplace_back(std::vector<int>{1, 2}, new PadenKahanTwoNormal(exp2, exp3, d, b));
-        steps.emplace_back(std::vector<int>{4, 5}, new PadenKahanTwoNormal(exp5, exp6, b, d));
-        steps.emplace_back(std::vector<int>{6}, new PadenKahanOne(exp7, o));
+        steps.emplace_back(std::vector<int>{4, 5}, new PadenKahanTwoNormal(exp5, exp6, e, d));
+        steps.emplace_back(std::vector<int>{6}, new PadenKahanOne(exp7, a));
 
         return ScrewTheoryIkProblem::create(poe, steps);
+    }
+
+    int findSolutionIndex(ScrewTheoryIkProblem * problem, const KDL::Frame & H_0_N_init, const KDL::JntArray & q_init)
+    {
+        std::vector<KDL::JntArray> solutions;
+        problem->solve(H_0_N_init, solutions);
+
+        TiagoConfigurationSelector selector;
+        selector.configure(solutions);
+        selector.findOptimalConfiguration(q_init);
+
+        return selector.getValidSolutionIndex();
     }
 }
 
 // -----------------------------------------------------------------------------
 
-ChainIkSolverPos_ST::ChainIkSolverPos_ST(const KDL::Chain & chain)
-    : problem(buildProblem(PoeExpression::fromChain(chain))),
-      selector(new TiagoConfigurationSelector)
+ChainIkSolverPos_ST::ChainIkSolverPos_ST(const KDL::Chain & chain, const KDL::Frame & H_0_N_init, const KDL::JntArray & q_init)
+    : problem(buildProblem(PoeExpression::fromChain(chain), H_0_N_init, q_init)),
+      solutionIndex(findSolutionIndex(problem.get(), H_0_N_init, q_init))
 {}
 
 // -----------------------------------------------------------------------------
@@ -69,10 +81,7 @@ int ChainIkSolverPos_ST::CartToJnt(const KDL::JntArray & q_init, const KDL::Fram
 {
     std::vector<KDL::JntArray> solutions;
     bool ret = problem->solve(p_in, solutions);
-
-    selector->configure(solutions);
-    selector->findOptimalConfiguration(q_init);
-    selector->retrievePose(q_out);
+    q_out = solutions[solutionIndex];
 
     return (error = ret ? E_NOERROR : E_NOT_REACHABLE);
 }
