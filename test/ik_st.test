@@ -1,0 +1,13 @@
+<launch>
+    <include file="$(find tiago_dual_description)/robots/upload.launch">
+        <arg name="arm_left" value="True"/>
+        <arg name="arm_right" value="True"/>
+        <arg name="end_effector_left" value="pal-gripper"/>
+        <arg name="end_effector_right" value="pal-gripper"/>
+        <arg name="ft_sensor_left" value="schunk-ft"/>
+        <arg name="ft_sensor_right" value="schunk-ft"/>
+        <arg name="base_type" value="pmb2"/>
+    </include>
+
+    <test test-name="chainiksolverpos_st_test" pkg="tiago_telepresence_controllers" type="ik_st_test"/>
+</launch>
