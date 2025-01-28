@@ -25,13 +25,19 @@ TiagoOne::TiagoOne(const MatrixExponential & _exp, const KDL::Vector & _p, const
 
 // -----------------------------------------------------------------------------
 
-bool TiagoOne::solve(const KDL::Frame & rhs, const KDL::Frame & pointTransform, Solutions & solutions) const
+bool TiagoOne::solve(const KDL::Frame & rhs, const KDL::Frame & pointTransform, const JointConfig & reference, Solutions & solutions) const
 {
     KDL::Vector k = (rhs * H_ST_0).p; // = H_noap.p
     KDL::Vector v = k - exp.getOrigin();
     KDL::Vector v_p = v - axisPow * v;
 
-    double theta = std::atan2(KDL::dot(exp.getAxis(), u_p * v_p), KDL::dot(u_p, v_p));
+    double theta = reference[0];
+
+    if (!KDL::Equal(u_p.Norm(), 0.0) && !KDL::Equal(v_p.Norm(), 0.0))
+    {
+        theta = std::atan2(KDL::dot(exp.getAxis(), u_p * v_p), KDL::dot(u_p, v_p));
+    }
+
     solutions = {{normalizeAngle(theta + offset)}};
 
     return true; // always assume reachable
@@ -47,7 +53,7 @@ PadenKahanOne::PadenKahanOne(const MatrixExponential & _exp, const KDL::Vector &
 
 // -----------------------------------------------------------------------------
 
-bool PadenKahanOne::solve(const KDL::Frame & rhs, const KDL::Frame & pointTransform, Solutions & solutions) const
+bool PadenKahanOne::solve(const KDL::Frame & rhs, const KDL::Frame & pointTransform, const JointConfig & reference, Solutions & solutions) const
 {
     KDL::Vector f = pointTransform * p;
     KDL::Vector k = rhs * p;
@@ -61,7 +67,13 @@ bool PadenKahanOne::solve(const KDL::Frame & rhs, const KDL::Frame & pointTransf
     KDL::Vector u_p = u - u_w;
     KDL::Vector v_p = v - v_w;
 
-    double theta = std::atan2(KDL::dot(exp.getAxis(), u_p * v_p), KDL::dot(u_p, v_p));
+    double theta = reference[0];
+
+    if (!KDL::Equal(u_p.Norm(), 0.0) && !KDL::Equal(v_p.Norm(), 0.0))
+    {
+        theta = std::atan2(KDL::dot(exp.getAxis(), u_p * v_p), KDL::dot(u_p, v_p));
+    }
+
     solutions = {{normalizeAngle(theta)}};
 
     return KDL::Equal(u_w, v_w) && KDL::Equal(u_p.Norm(), v_p.Norm());
@@ -82,7 +94,7 @@ PadenKahanTwoNormal::PadenKahanTwoNormal(const MatrixExponential & _exp1, const 
 
 // -----------------------------------------------------------------------------
 
-bool PadenKahanTwoNormal::solve(const KDL::Frame & rhs, const KDL::Frame & pointTransform, Solutions & solutions) const
+bool PadenKahanTwoNormal::solve(const KDL::Frame & rhs, const KDL::Frame & pointTransform, const JointConfig & reference, Solutions & solutions) const
 {
     KDL::Vector f = pointTransform * p;
     KDL::Vector k = rhs * p;
@@ -139,8 +151,18 @@ bool PadenKahanTwoNormal::solve(const KDL::Frame & rhs, const KDL::Frame & point
         KDL::Vector n1_p = n - axisPow1 * n;
         KDL::Vector n2_p = n - axisPow2 * n;
 
-        double theta1 = std::atan2(KDL::dot(exp1.getAxis(), n1_p * v_p), KDL::dot(n1_p, v_p));
-        double theta2 = std::atan2(KDL::dot(exp2.getAxis(), u_p * n2_p), KDL::dot(u_p, n2_p));
+        double theta1 = reference[0];
+        double theta2 = reference[1];
+
+        if (!KDL::Equal(v_p.Norm(), 0.0))
+        {
+            theta1 = std::atan2(KDL::dot(exp1.getAxis(), n1_p * v_p), KDL::dot(n1_p, v_p));
+        }
+
+        if (!KDL::Equal(u_p.Norm(), 0.0))
+        {
+            theta2 = std::atan2(KDL::dot(exp2.getAxis(), u_p * n2_p), KDL::dot(u_p, n2_p));
+        }
 
         double normalized1 = normalizeAngle(theta1);
         double normalized2 = normalizeAngle(theta2);
@@ -167,10 +189,10 @@ PadenKahanThree::PadenKahanThree(const MatrixExponential & _exp, const KDL::Vect
 
 // -----------------------------------------------------------------------------
 
-bool PadenKahanThree::solve(const KDL::Frame & rhs, const KDL::Frame & pointTransform, Solutions & solutions) const
+bool PadenKahanThree::solve(const KDL::Frame & rhs, const KDL::Frame & pointTransform, const JointConfig & reference, Solutions & solutions) const
 {
     KDL::Vector f = pointTransform * p;
-    KDL::Vector rhsAsVector = rhs * p - k;
+    KDL::Vector rhsAsVector = rhs * f - k;
     double delta = rhsAsVector.Norm();
 
     KDL::Vector u = f - exp.getOrigin();
@@ -185,31 +207,45 @@ bool PadenKahanThree::solve(const KDL::Frame & rhs, const KDL::Frame & pointTran
     double u_p_norm = u_p.Norm();
     double v_p_norm = v_p.Norm();
 
-    double betaCos = (std::pow(u_p_norm, 2) + std::pow(v_p_norm, 2) - delta_p_2) / (2 * u_p_norm * v_p_norm);
-    double betaCosAbs = std::abs(betaCos);
-    bool beta_zero = KDL::Equal(betaCosAbs, 1.0);
+    bool u_p_norm_zero = KDL::Equal(u_p_norm, 0.0);
+    bool v_p_norm_zero = KDL::Equal(v_p_norm, 0.0);
 
-    bool ret;
-
-    if (!beta_zero && betaCosAbs < 1.0)
+    if (!u_p_norm_zero && !v_p_norm_zero)
     {
-        double betaCosCapped = std::max(-1.0, std::min(1.0, betaCos));
-        double beta = std::acos(betaCosCapped);
+        double betaCos = (std::pow(u_p_norm, 2) + std::pow(v_p_norm, 2) - delta_p_2) / (2 * u_p_norm * v_p_norm);
+        double betaCosAbs = std::abs(betaCos);
+        bool beta_zero_or_pi = KDL::Equal(betaCosAbs, 1.0);
 
-        double theta1 = alpha + beta;
-        double theta2 = alpha - beta;
+        if (!beta_zero_or_pi && betaCosAbs < 1.0)
+        {
+            double betaCosCapped = std::max(-1.0, std::min(1.0, betaCos));
+            double beta = std::acos(betaCosCapped);
 
-        solutions = {{normalizeAngle(theta1)}, {normalizeAngle(theta2)}};
-        ret = true;
+            double theta1 = alpha + beta;
+            double theta2 = alpha - beta;
+
+            solutions = {{normalizeAngle(theta1)}, {normalizeAngle(theta2)}};
+            return true;
+        }
+        else
+        {
+            if (KDL::Equal(betaCos, -1.0))
+            {
+                alpha += KDL::PI;
+            }
+
+            double normalized = normalizeAngle(alpha);
+            solutions = {{normalized}, {normalized}};
+            return beta_zero_or_pi;
+        }
     }
     else
     {
-        double normalized = normalizeAngle(alpha);
+        double ddelta = (f - k).Norm();
+        double normalized = normalizeAngle(reference[0]);
         solutions = {{normalized}, {normalized}};
-        ret = beta_zero;
+        return KDL::Equal(delta, ddelta);
     }
-
-    return ret;
 }
 
 // -----------------------------------------------------------------------------

@@ -23,6 +23,8 @@ namespace roboticslab
 class TiagoOne : public ScrewTheoryIkSubproblem
 {
 public:
+    using ScrewTheoryIkSubproblem::solve;
+
     /**
      * @brief Constructor
      *
@@ -31,7 +33,7 @@ public:
      */
     TiagoOne(const MatrixExponential & exp, const KDL::Vector & p, const KDL::Frame & H_ST_0, const KDL::Frame & H_0_N_init, double theta);
 
-    bool solve(const KDL::Frame & rhs, const KDL::Frame & pointTransform, Solutions & solutions) const override;
+    bool solve(const KDL::Frame & rhs, const KDL::Frame & pointTransform, const JointConfig & reference, Solutions & solutions) const override;
 
     int solutions() const override
     { return 1; }
@@ -67,7 +69,7 @@ public:
      */
     PadenKahanOne(const MatrixExponential & exp, const KDL::Vector & p);
 
-    bool solve(const KDL::Frame & rhs, const KDL::Frame & pointTransform, Solutions & solutions) const override;
+    bool solve(const KDL::Frame & rhs, const KDL::Frame & pointTransform, const JointConfig & reference, Solutions & solutions) const override;
 
     int solutions() const override
     { return 1; }
@@ -103,7 +105,7 @@ public:
      */
     PadenKahanTwoNormal(const MatrixExponential & exp1, const MatrixExponential & exp2, const KDL::Vector & p, const KDL::Vector & r);
 
-    bool solve(const KDL::Frame & rhs, const KDL::Frame & pointTransform, Solutions & solutions) const override;
+    bool solve(const KDL::Frame & rhs, const KDL::Frame & pointTransform, const JointConfig & reference, Solutions & solutions) const override;
 
     int solutions() const override
     { return 2; }
@@ -140,7 +142,7 @@ public:
      */
     PadenKahanThree(const MatrixExponential & exp, const KDL::Vector & p, const KDL::Vector & k);
 
-    bool solve(const KDL::Frame & rhs, const KDL::Frame & pointTransform, Solutions & solutions) const override;
+    bool solve(const KDL::Frame & rhs, const KDL::Frame & pointTransform, const JointConfig & reference, Solutions & solutions) const override;
 
     int solutions() const override
     { return 2; }

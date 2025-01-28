@@ -25,8 +25,11 @@ namespace roboticslab
 class ScrewTheoryIkSubproblem
 {
 public:
+    //! Joint configurations
+    using JointConfig = std::vector<double>;
+
     //! Collection of local IK solutions
-    using Solutions = std::vector<std::vector<double>>;
+    using Solutions = std::vector<JointConfig>;
 
     //! Destructor
     virtual ~ScrewTheoryIkSubproblem() = default;
@@ -63,11 +66,18 @@ public:
      * right-hand side of this subproblem.
      * @param pointTransform Transformation frame applied to the first (and perhaps
      * only) characteristic point of this subproblem.
+     * @param reference Known nearby solutions to be used as reference in case a
+     * singularity is found.
      * @param solutions Output vector of local solutions.
      *
      * @return True if all solutions are reachable, false otherwise.
      */
-    virtual bool solve(const KDL::Frame & rhs, const KDL::Frame & pointTransform, Solutions & solutions) const = 0;
+    virtual bool solve(const KDL::Frame & rhs, const KDL::Frame & pointTransform, const JointConfig & reference, Solutions & solutions) const = 0;
+
+    bool solve(const KDL::Frame & rhs, const KDL::Frame & pointTransform, Solutions & _solutions)
+    {
+        return solve(rhs, pointTransform, JointConfig(solutions()), _solutions);
+    }
 
     //! Number of local IK solutions
     virtual int solutions() const = 0;
@@ -108,11 +118,18 @@ public:
      * @brief Find all available solutions
      *
      * @param H_S_T Target pose in cartesian space.
+     * @param reference Known nearby solutions to be used as reference in case
+     * a singularity is found.
      * @param solutions Output vector of solutions stored as joint arrays.
      *
-     * @return True if all solutions are reachable, false otherwise.
+     * @return Vector of Booleans indicating whether the associated solution is reachable.
      */
-    bool solve(const KDL::Frame & H_S_T, Solutions & solutions);
+    std::vector<bool> solve(const KDL::Frame & H_S_T, const KDL::JntArray & reference, Solutions & solutions);
+
+    std::vector<bool> solve(const KDL::Frame & H_S_T, Solutions & solutions)
+    {
+        return solve(H_S_T, KDL::JntArray(poe.size()), solutions);
+    }
 
     //! Number of global IK solutions
     int solutions() const
@@ -161,8 +178,11 @@ private:
     // we own these, resources freed in destructor
     const Steps steps;
 
-    const bool reversed;
+    PoeTerms poeTerms;
+    Frames rhsFrames;
+    std::vector<bool> reachability;
 
+    const bool reversed;
     const int soln;
 };
 
@@ -223,6 +243,8 @@ private:
 
     static const int MAX_SIMPLIFICATION_DEPTH = 2;
 };
+
+ScrewTheoryIkProblem * buildProblem(const PoeExpression & poe, const KDL::Frame & H_0_N_init, const KDL::JntArray & q_init);
 
 } // namespace roboticslab
 

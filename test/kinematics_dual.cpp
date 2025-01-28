@@ -61,26 +61,9 @@ bool doCheck(const KDL::Chain & chain, KDL::ChainFkSolverPos & fkSolverPos, cons
         return false;
     }
 
-    for (int i = 0; i < q.rows(); i++)
+    if (!KDL::Equal(q, q_st))
     {
-        if (!KDL::Equal(q(i), q_st(i)))
-        {
-            ROS_ERROR("q(%d) = %f != q_st(%d) = %f", i, q(i), i, q_st(i));
-            return false;
-        }
-    }
-
-    KDL::Frame H_st;
-
-    if (fkSolverPos.JntToCart(q_st, H_st) < 0)
-    {
-        ROS_ERROR("JntToCart (2) failed");
-        return false;
-    }
-
-    if (!KDL::Equal(H, H_st))
-    {
-        ROS_ERROR("H != H_st");
+        ROS_ERROR("q != q_st");
         return false;
     }
 

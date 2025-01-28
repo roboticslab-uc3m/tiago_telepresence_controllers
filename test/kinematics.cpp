@@ -6,6 +6,7 @@
 
 #include "st/chainiksolverpos_st.hpp"
 #include "st/ProductOfExponentials.hpp"
+#include "ScrewTheoryIkProblem.hpp"
 
 namespace rl = roboticslab;
 
@@ -48,13 +49,72 @@ const double KinematicsTest::PI = KDL::PI;
 const double KinematicsTest::PI_2 = KDL::PI / 2;
 const double KinematicsTest::eps = 1e-4;
 
-bool doCheck(const KDL::Chain & chain, KDL::ChainFkSolverPos & fkSolverPos, const KDL::JntArray & q)
+bool doCheckST(const KDL::Chain & chain, KDL::ChainFkSolverPos & fkSolverPos, const KDL::JntArray & q)
+{
+    KDL::Frame H;
+
+    if (fkSolverPos.JntToCart(q, H) != KDL::SolverI::E_NOERROR)
+    {
+        ROS_ERROR("JntToCart (1) failed");
+        return false;
+    }
+
+    auto * ikProblem = buildProblem(rl::PoeExpression::fromChain(chain), H, q);
+
+    if (ikProblem == nullptr)
+    {
+        ROS_ERROR("ikProblem == nullptr");
+        return false;
+    }
+
+    std::vector<KDL::JntArray> solutions;
+    auto reachability = ikProblem->solve(H, q, solutions);
+
+    if (solutions.size() != 8 || reachability.size() != 8)
+    {
+        ROS_ERROR("solutions.size() != 8 || reachability.size() != 8");
+        return false;
+    }
+
+    bool match = false;
+
+    for (int i = 0; i < solutions.size(); i++)
+    {
+        KDL::Frame H_st;
+
+        if (fkSolverPos.JntToCart(solutions[i], H_st) != KDL::SolverI::E_NOERROR)
+        {
+            ROS_ERROR("JntToCart (2) failed");
+            return false;
+        }
+
+        if (reachability[i] ^ KDL::Equal(H, H_st))
+        {
+            ROS_ERROR("reachability[%d] ^ KDL::Equal(H, H_st)", i);
+            return false;
+        }
+
+        bool test = true;
+
+        for (int j = 0; j < q.rows(); j++)
+        {
+            // the KDL::Equal overload for JntArray always returns false for some reason
+            test &= KDL::Equal(solutions[i](j), q(j));
+        }
+
+        match |= test;
+    }
+
+    return match;
+}
+
+bool doCheckKDL(const KDL::Chain & chain, KDL::ChainFkSolverPos & fkSolverPos, const KDL::JntArray & q)
 {
     KDL::Frame H;
 
     if (fkSolverPos.JntToCart(q, H) < 0)
     {
-        ROS_ERROR("JntToCart (1) failed");
+        std::printf("JntToCart (1) failed\n");
         return false;
     }
 
@@ -64,41 +124,37 @@ bool doCheck(const KDL::Chain & chain, KDL::ChainFkSolverPos & fkSolverPos, cons
 
     if (ikSolverPos.CartToJnt(q, H, q_st) != KDL::SolverI::E_NOERROR)
     {
-        ROS_ERROR("CartToJnt failed");
+        std::printf("CartToJnt failed\n");
         return false;
     }
+
+    bool test = true;
 
     for (int i = 0; i < q.rows(); i++)
     {
-        if (!KDL::Equal(q(i), q_st(i)))
-        {
-            ROS_ERROR("q(%d) = %f != q_st(%d) = %f", i, q(i), i, q_st(i));
-            return false;
-        }
+        // the KDL::Equal overload for JntArray always returns false for some reason
+        test &= KDL::Equal(q(i), q_st(i));
     }
 
-    KDL::Frame H_st;
+    return test;
+}
 
-    if (fkSolverPos.JntToCart(q_st, H_st) < 0)
-    {
-        ROS_ERROR("JntToCart (2) failed");
-        return false;
-    }
-
-    if (!KDL::Equal(H, H_st))
-    {
-        ROS_ERROR("H != H_st");
-        return false;
-    }
-
-    return true;
+TEST_F(KinematicsTest, ScrewTheoryIkProblem_Test)
+{
+    KDL::ChainFkSolverPos_recursive fkSolverPos(chain);
+    ASSERT_TRUE(doCheckST(chain, fkSolverPos, jointVectorToKdl(std::vector<double>(7, 0.0))));
+    ASSERT_TRUE(doCheckST(chain, fkSolverPos, jointVectorToKdl(std::vector<double>(7, 0.1))));
+    ASSERT_TRUE(doCheckST(chain, fkSolverPos, jointVectorToKdl(std::vector<double>(7, PI_2))));
+    ASSERT_TRUE(doCheckST(chain, fkSolverPos, jointVectorToKdl(std::vector<double>(7, PI))));
 }
 
 TEST_F(KinematicsTest, ChainIkSolverPos_ST_Test)
 {
     KDL::ChainFkSolverPos_recursive fkSolverPos(chain);
-    // ASSERT_TRUE(doCheck(chain, fkSolverPos, jointVectorToKdl({0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0})));
-    ASSERT_TRUE(doCheck(chain, fkSolverPos, jointVectorToKdl({0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1})));
+    // ASSERT_TRUE(doCheckKDL(chain, fkSolverPos, jointVectorToKdl(std::vector<double>(7, 0.0))));
+    ASSERT_TRUE(doCheckKDL(chain, fkSolverPos, jointVectorToKdl(std::vector<double>(7, 0.1))));
+    // ASSERT_TRUE(doCheckKDL(chain, fkSolverPos, jointVectorToKdl(std::vector<double>(7, PI_2))));
+    // ASSERT_TRUE(doCheckKDL(chain, fkSolverPos, jointVectorToKdl(std::vector<double>(7, PI))));
 }
 
 TEST_F(KinematicsTest, DH_Test)

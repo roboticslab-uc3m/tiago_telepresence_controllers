@@ -5,6 +5,8 @@
 #include <numeric> // std::accumulate
 #include <vector>
 
+#include "ScrewTheoryTools.hpp"
+
 using namespace roboticslab;
 
 // -----------------------------------------------------------------------------
@@ -29,6 +31,25 @@ namespace
     {
         return !steps.empty() ? std::accumulate(steps.begin(), steps.end(), 1, solutionAccumulator) : 0;
     }
+
+    std::vector<double> extractValues(const std::vector<int> indices, const KDL::JntArray & q, bool reversed)
+    {
+        std::vector<double> values(indices.size());
+
+        for (auto i = 0; i < indices.size(); i++)
+        {
+            if (!reversed)
+            {
+                values[i] = q(indices[i]);
+            }
+            else
+            {
+                values[i] = -q(q.rows() - 1 - indices[i]);
+            }
+        }
+
+        return values;
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -38,7 +59,11 @@ ScrewTheoryIkProblem::ScrewTheoryIkProblem(const PoeExpression & _poe, const Ste
       steps(_steps),
       reversed(_reversed),
       soln(computeSolutions(steps))
-{}
+{
+    poeTerms.reserve(soln);
+    rhsFrames.reserve(soln);
+    reachability.reserve(soln);
+}
 
 // -----------------------------------------------------------------------------
 
@@ -52,23 +77,23 @@ ScrewTheoryIkProblem::~ScrewTheoryIkProblem()
 
 // -----------------------------------------------------------------------------
 
-bool ScrewTheoryIkProblem::solve(const KDL::Frame & H_S_T, Solutions & solutions)
+std::vector<bool> ScrewTheoryIkProblem::solve(const KDL::Frame & H_S_T, const KDL::JntArray & reference, Solutions & solutions)
 {
     solutions.clear();
+    rhsFrames.clear();
+    reachability.clear();
 
     // Reserve space in memory to avoid additional allocations on runtime.
     solutions.reserve(soln);
+
+    // Insert a dummy value to avoid accessing an empty vector.
     solutions.emplace_back(poe.size());
+    rhsFrames.emplace_back((reversed ? H_S_T.Inverse() : H_S_T) * poe.getTransform().Inverse());
+    reachability.emplace_back(true);
 
-    PoeTerms poeTerms(poe.size(), EXP_UNKNOWN);
-
-    Frames rhsFrames;
-
-    rhsFrames.reserve(soln);
-    rhsFrames.push_back((reversed ? H_S_T.Inverse() : H_S_T) * poe.getTransform().Inverse());
+    poeTerms.assign(poe.size(), EXP_UNKNOWN);
 
     bool firstIteration = true;
-    bool reachable = true;
 
     ScrewTheoryIkSubproblem::Solutions partialSolutions;
 
@@ -76,6 +101,7 @@ bool ScrewTheoryIkProblem::solve(const KDL::Frame & H_S_T, Solutions & solutions
     {
         const auto & ids = step.first;
         const auto * subproblem = step.second;
+        const auto referenceValues = extractValues(ids, reference, reversed);
 
         if (!firstIteration)
         {
@@ -93,23 +119,32 @@ bool ScrewTheoryIkProblem::solve(const KDL::Frame & H_S_T, Solutions & solutions
             const KDL::Frame & H = transformPoint(solutions[i], poeTerms);
 
             // Actually solve each subproblem, use current right-hand side of PoE to obtain
-            // the right-hand side of said subproblem.
-            reachable = reachable & subproblem->solve(rhsFrames[i], H, partialSolutions);
+            // the right-hand side of said subproblem. Local reachability is common to all
+            // partial solutions, and will be and-ed with the global reachability status.
+            bool reachable = subproblem->solve(rhsFrames[i], H, referenceValues, partialSolutions) & reachability[i];
 
             // The global number of solutions is increased by this step.
             if (partialSolutions.size() > 1)
             {
+                const int partialSize = previousSize * partialSolutions.size();
+
                 // Noop if current size is not less than requested.
-                solutions.resize(previousSize * partialSolutions.size());
-                rhsFrames.resize(previousSize * partialSolutions.size());
+                solutions.resize(partialSize);
+                rhsFrames.resize(partialSize);
+                reachability.resize(partialSize);
 
                 for (int j = 1; j < partialSolutions.size(); j++)
                 {
+                    const int index = i + previousSize * j;
+
                     // Replicate known solutions, these won't change further on.
-                    solutions[i + previousSize * j] = solutions[i];
+                    solutions[index] = solutions[i];
 
                     // Replicate right-hand side frames for the next iteration, these might change.
-                    rhsFrames[i + previousSize * j] = rhsFrames[i];
+                    rhsFrames[index] = rhsFrames[i];
+
+                    // Replicate reachability status.
+                    reachability[index] = reachability[i];
                 }
             }
 
@@ -128,19 +163,22 @@ bool ScrewTheoryIkProblem::solve(const KDL::Frame & H_S_T, Solutions & solutions
                     if (reversed)
                     {
                         id = poe.size() - 1 - id;
-                        theta = -theta;
+                        theta = normalizeAngle(-theta);
                     }
 
                     // Store the final value in the desired index, don't shuffle it after this point.
                     solutions[i + previousSize * j](id) = theta;
                 }
+
+                // Store reachability status.
+                reachability[i + previousSize * j] = reachable;
             }
         }
 
         firstIteration = false;
     }
 
-    return reachable;
+    return reachability; // returns a copy
 }
 
 // -----------------------------------------------------------------------------
@@ -241,7 +279,7 @@ KDL::Frame ScrewTheoryIkProblem::transformPoint(const KDL::JntArray & jointValue
         {
             if (foundKnown || foundUnknown)
             {
-                // Only skip this if we have a sequence of aldeady-computed terms in the
+                // Only skip this if we have a sequence of already-computed terms in the
                 // rightmost end of the PoE.
                 break;
             }

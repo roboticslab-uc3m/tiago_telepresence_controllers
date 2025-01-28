@@ -43,6 +43,7 @@ add_library(tiago_st_solvers src/st/MatrixExponential.cpp
                              src/st/ProductOfExponentials.cpp
                              src/st/ScrewTheoryIkProblem.cpp
                              src/st/TiagoSubproblems.cpp
+                             src/st/TiagoIkProblem.cpp
                              src/st/ConfigurationSelector.cpp
                              src/st/TiagoConfigurationSelector.cpp
                              src/st/chainiksolverpos_st.cpp
