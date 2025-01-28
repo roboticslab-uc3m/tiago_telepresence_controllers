@@ -20,24 +20,41 @@ bool doCheck(const KDL::Chain & chain, KDL::ChainFkSolverPos & fkSolverPos, cons
 
     if (fkSolverPos.JntToCart(q, H) < 0)
     {
+        ROS_ERROR("JntToCart (1) failed");
         return false;
     }
 
     ChainIkSolverPos_ST ikSolverPos(chain, H, q);
 
-    KDL::JntArray q_out(chain.getNrOfJoints());
+    KDL::JntArray q_st(chain.getNrOfJoints());
 
-    if (!ikSolverPos.CartToJnt(q, H, q_out))
+    if (ikSolverPos.CartToJnt(q, H, q_st) != KDL::SolverI::E_NOERROR)
     {
+        ROS_ERROR("CartToJnt failed");
         return false;
     }
 
     for (int i = 0; i < q.rows(); i++)
     {
-        if (!KDL::Equal(q(i), q_out(i)))
+        if (!KDL::Equal(q(i), q_st(i)))
         {
+            ROS_ERROR("q(%d) = %f != q_st(%d) = %f", i, q(i), i, q_st(i));
             return false;
         }
+    }
+
+    KDL::Frame H_st;
+
+    if (fkSolverPos.JntToCart(q_st, H_st) < 0)
+    {
+        ROS_ERROR("JntToCart (2) failed");
+        return false;
+    }
+
+    if (!KDL::Equal(H, H_st))
+    {
+        ROS_ERROR("H != H_st");
+        return false;
     }
 
     return true;
@@ -62,7 +79,8 @@ TEST(TestSuite, ChainIkSolverPos_ST_Test)
     ASSERT_TRUE(tree.getChain(start_link, end_link, chain));
 
     KDL::ChainFkSolverPos_recursive fkSolverPos(chain);
-    ASSERT_TRUE(doCheck(chain, fkSolverPos, jointVectorToKdl({0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0})));
+    // ASSERT_TRUE(doCheck(chain, fkSolverPos, jointVectorToKdl({0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0})));
+    ASSERT_TRUE(doCheck(chain, fkSolverPos, jointVectorToKdl({0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1})));
 }
 
 int main(int argc, char **argv)
