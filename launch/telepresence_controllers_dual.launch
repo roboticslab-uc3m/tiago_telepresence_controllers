@@ -8,7 +8,7 @@
 
     <node name="tp_arm_motion"
           pkg="tiago_telepresence_controllers" type="arm_motion.py" output="screen"
-          args="--arm $(arg arm) --motion $(arg motion)"/>
+          args="--arm $(arg arm) --motion '$(arg motion)'"/>
 
     <rosparam command="load" file="$(find tiago_telepresence_controllers)/config/telepresence_controllers_dual.yaml"/>
 
