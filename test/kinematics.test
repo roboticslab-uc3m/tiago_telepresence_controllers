@@ -12,5 +12,5 @@
     <param name="start_link" value="torso_lift_link"/>
     <param name="end_link" value="gripper_right_grasping_frame"/>
 
-    <test test-name="chainiksolverpos_st_test" pkg="tiago_telepresence_controllers" type="ik_st_test"/>
+    <test test-name="kinematics" pkg="tiago_telepresence_controllers" type="kinematics_test"/>
 </launch>

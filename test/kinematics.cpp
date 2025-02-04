@@ -14,6 +14,29 @@ inline KDL::JntArray jointVectorToKdl(const std::vector<double> & v)
     return ret;
 }
 
+class KinematicsTest : public ::testing::Test
+{
+public:
+    KinematicsTest()
+    {
+        std::string description;
+        n.getParam("robot_description", description);
+
+        KDL::Tree tree;
+        kdl_parser::treeFromString(description, tree);
+
+        std::string start_link, end_link;
+        n.getParam("start_link", start_link);
+        n.getParam("end_link", end_link);
+
+        tree.getChain(start_link, end_link, chain);
+    }
+
+protected:
+    ros::NodeHandle n;
+    KDL::Chain chain;
+};
+
 bool doCheck(const KDL::Chain & chain, KDL::ChainFkSolverPos & fkSolverPos, const KDL::JntArray & q)
 {
     KDL::Frame H;
@@ -60,24 +83,8 @@ bool doCheck(const KDL::Chain & chain, KDL::ChainFkSolverPos & fkSolverPos, cons
     return true;
 }
 
-TEST(TestSuite, ChainIkSolverPos_ST_Test)
+TEST_F(KinematicsTest, ChainIkSolverPos_ST_Test)
 {
-    ros::NodeHandle n;
-
-    std::string description;
-    ASSERT_TRUE(n.getParam("robot_description", description));
-
-    KDL::Tree tree;
-    ASSERT_TRUE(kdl_parser::treeFromString(description, tree));
-
-    std::string start_link, end_link;
-
-    ASSERT_TRUE(n.getParam("start_link", start_link));
-    ASSERT_TRUE(n.getParam("end_link", end_link));
-
-    KDL::Chain chain;
-    ASSERT_TRUE(tree.getChain(start_link, end_link, chain));
-
     KDL::ChainFkSolverPos_recursive fkSolverPos(chain);
     // ASSERT_TRUE(doCheck(chain, fkSolverPos, jointVectorToKdl({0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0})));
     ASSERT_TRUE(doCheck(chain, fkSolverPos, jointVectorToKdl({0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1})));
