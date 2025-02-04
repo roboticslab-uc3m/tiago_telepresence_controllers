@@ -5,6 +5,9 @@
 #include <kdl/chainfksolverpos_recursive.hpp>
 
 #include "st/chainiksolverpos_st.hpp"
+#include "st/ProductOfExponentials.hpp"
+
+namespace rl = roboticslab;
 
 inline KDL::JntArray jointVectorToKdl(const std::vector<double> & v)
 {
@@ -28,7 +31,13 @@ public:
 protected:
     ros::NodeHandle n;
     KDL::Tree tree;
+
+    static const double PI;
+    static const double PI_2;
 };
+
+const double KinematicsTest::PI = KDL::PI;
+const double KinematicsTest::PI_2 = KDL::PI / 2;
 
 bool doCheck(const KDL::Chain & chain, KDL::ChainFkSolverPos & fkSolverPos, const KDL::JntArray & q)
 {
@@ -127,7 +136,6 @@ TEST_F(KinematicsTest, DH_RightArm_Test)
     // H_torso_grasping.p =  [0.004559 -1.135075 -0.202]
     // angle = 2.094342, axis = [-0.577330 0.577332 -0.577388]
 
-    const auto PI_2 = KDL::PI / 2;
     const auto RotZ = KDL::Joint(KDL::Joint::RotZ);
     const auto fixed = KDL::Joint(KDL::Joint::None);
 
@@ -209,15 +217,13 @@ TEST_F(KinematicsTest, DH_LeftArm_Test)
     // H_torso_grasping.p =  [0.007559 1.135075 -0.202]
     // angle = 2.094453, axis = [0.577367 0.577370 0.577314]
 
-    const auto PI = KDL::PI;
-    const auto PI_2 = KDL::PI / 2;
     const auto RotZ = KDL::Joint(KDL::Joint::RotZ);
     const auto fixed = KDL::Joint(KDL::Joint::None);
 
     KDL::Chain chain_dh;
 
     // H_torso_0
-    chain_dh.addSegment(KDL::Segment(fixed, KDL::Frame(KDL::Rotation::RPY(KDL::PI, 0.0, PI_2), KDL::Vector(0.02556, 0.19, -0.171))));
+    chain_dh.addSegment(KDL::Segment(fixed, KDL::Frame(KDL::Rotation::RPY(PI, 0.0, PI_2), KDL::Vector(0.02556, 0.19, -0.171))));
 
     //                                                 KDL::Frame::DH(    A, alpha,       D, theta)
     /* H_0_1 */ chain_dh.addSegment(KDL::Segment(RotZ, KDL::Frame::DH(0.125,  PI_2,  0.031,   0.0)));
@@ -249,6 +255,43 @@ TEST_F(KinematicsTest, DH_LeftArm_Test)
     ASSERT_TRUE(fkSolverPos_dh.JntToCart(q, H_dh) == KDL::SolverI::E_NOERROR);
 
     ASSERT_TRUE(KDL::Equal(H, H_dh, 1e-4));
+}
+
+TEST_F(KinematicsTest, ST_RightArm_Test)
+{
+    KDL::Chain chain;
+    ASSERT_TRUE(tree.getChain("torso_lift_link", "gripper_right_grasping_frame", chain));
+
+    KDL::ChainFkSolverPos_recursive fkSolverPos(chain);
+    KDL::JntArray q(chain.getNrOfJoints());
+    KDL::Frame H;
+
+    ASSERT_TRUE(fkSolverPos.JntToCart(q, H) == KDL::SolverI::E_NOERROR);
+
+    KDL::Frame H_ST_0(KDL::Rotation::RPY(-PI_2, 0.0, -PI_2), KDL::Vector(0.00456, -1.135075, -0.202));
+    rl::PoeExpression poe(H_ST_0);
+
+    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, {0, 0, 1}, {0.02556, -0.19, -0.202}));
+    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, {1, 0, 0}, {0.00456, -0.315, -0.202}));
+    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, {0, 1, 0}, {0.00456, -0.315, -0.202}));
+    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, {-1, 0, 0}, {0.00456, -0.9385, -0.182}));
+    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, {0, -1, 0}, {0.00456, -0.12505, -0.202}));
+    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, {0, 0, -1}, {0.00456, -0.12505, -0.202}));
+    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, {0, -1, 0}, {0.00456, -0.12505, -0.202}));
+
+    KDL::Frame H_ST;
+    ASSERT_TRUE(poe.evaluate(q, H_ST));
+
+    ASSERT_TRUE(KDL::Equal(H, H_ST, 1e-4));
+
+    q = jointVectorToKdl(std::vector<double>(chain.getNrOfJoints(), 0.1));
+    ASSERT_TRUE(fkSolverPos.JntToCart(q, H) == KDL::SolverI::E_NOERROR);
+    ASSERT_TRUE(poe.evaluate(q, H_ST));
+
+    std::printf("H.p = [%f %f %f]\n", H.p.x(), H.p.y(), H.p.z());
+    std::printf("H_ST.p = [%f %f %f]\n", H_ST.p.x(), H_ST.p.y(), H_ST.p.z());
+
+    ASSERT_TRUE(KDL::Equal(H, H_ST, 1e-4));
 }
 
 int main(int argc, char **argv)
