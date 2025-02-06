@@ -17,10 +17,10 @@ inline KDL::JntArray jointVectorToKdl(const std::vector<double> & v)
     return ret;
 }
 
-class KinematicsTest : public ::testing::Test
+class KinematicsDualTest : public ::testing::Test
 {
 public:
-    KinematicsTest()
+    KinematicsDualTest()
     {
         std::string description;
         n.getParam("robot_description", description);
@@ -34,10 +34,12 @@ protected:
 
     static const double PI;
     static const double PI_2;
+    static const double eps;
 };
 
-const double KinematicsTest::PI = KDL::PI;
-const double KinematicsTest::PI_2 = KDL::PI / 2;
+const double KinematicsDualTest::PI = KDL::PI;
+const double KinematicsDualTest::PI_2 = KDL::PI / 2;
+const double KinematicsDualTest::eps = 1e-4;
 
 bool doCheck(const KDL::Chain & chain, KDL::ChainFkSolverPos & fkSolverPos, const KDL::JntArray & q)
 {
@@ -85,7 +87,7 @@ bool doCheck(const KDL::Chain & chain, KDL::ChainFkSolverPos & fkSolverPos, cons
     return true;
 }
 
-TEST_F(KinematicsTest, ChainIkSolverPos_ST_Test)
+TEST_F(KinematicsDualTest, ChainIkSolverPos_ST_Test)
 {
     KDL::Chain chain;
     ASSERT_TRUE(tree.getChain("torso_lift_link", "gripper_right_grasping_frame", chain));
@@ -95,24 +97,24 @@ TEST_F(KinematicsTest, ChainIkSolverPos_ST_Test)
     ASSERT_TRUE(doCheck(chain, fkSolverPos, jointVectorToKdl({0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1})));
 }
 
-TEST_F(KinematicsTest, DH_RightArm_Test)
+TEST_F(KinematicsDualTest, DH_RightArm_Test)
 {
     KDL::Chain chain;
     ASSERT_TRUE(tree.getChain("torso_lift_link", "gripper_right_grasping_frame", chain));
 
     // from `robot_description`:
-    // arm_right_1_joint: rpy="0 0 -1.5707963267948966" xyz="0.02556 -0.19 -0.171"
-    // arm_right_2_joint: rpy="-1.5707963267948966 0.0 0.0" xyz="0.125 -0.0195 -0.031"
-    // arm_right_3_joint: rpy="-1.5707963267948966 0.0 1.5707963267948966" xyz="0.0895 0.0 -0.0015"
-    // arm_right_4_joint: rpy="-1.5707963267948966 -1.5707963267948966 0.0" xyz="-0.02 -0.027 -0.222"
-    // arm_right_5_joint: rpy="1.5707963267948966 -1.5707963267948966 -1.5707963267948966" xyz="-0.162 0.02 0.027"
-    // arm_right_6_joint: rpy="0.0 -1.5707963267948966 -1.5707963267948966" xyz="0 0 0.15"
-    // arm_right_7_joint: rpy="1.5707963267948966 0.0 1.5707963267948966" xyz="0 0 0"
-    // arm_right_tool_joint: rpy="1.5707963267948966 -1.5707963267948966 3.141592653589793" xyz="0 0 0.046"
-    // wrist_right_ft_joint: rpy="1.5707963267948966 0 1.5707963267948966" xyz="0.00785 0 0"
-    // wrist_right_tool_joint: rpy="-1.5707963267948966 -1.5707963267948966 0" xyz="0 0 0.012725"
-    // gripper_right_joint: rpy="1.5707963267948966 1.5707963267948966 -1.5707963267948966" xyz="0.01 0 0"
-    // gripper_right_base_joint: rpy="0 3.1416 1.5707" xyz="0. 0 0"
+    // arm_right_1_joint:        xyz=" 0.02556 -0.19   -0.171"    rpy="0 0 -1.5707963267948966"
+    // arm_right_2_joint:        xyz=" 0.125   -0.0195 -0.031"    rpy="-1.5707963267948966 0.0 0.0"
+    // arm_right_3_joint:        xyz=" 0.0895   0.0    -0.0015"   rpy="-1.5707963267948966 0.0 1.5707963267948966"
+    // arm_right_4_joint:        xyz="-0.02    -0.027  -0.222"    rpy="-1.5707963267948966 -1.5707963267948966 0.0"
+    // arm_right_5_joint:        xyz="-0.162    0.02    0.027"    rpy="1.5707963267948966 -1.5707963267948966 -1.5707963267948966"
+    // arm_right_6_joint:        xyz=" 0        0       0.15"     rpy="0.0 -1.5707963267948966 -1.5707963267948966"
+    // arm_right_7_joint:        xyz=" 0        0       0"        rpy="1.5707963267948966 0.0 1.5707963267948966"
+    // arm_right_tool_joint:     xyz=" 0        0       0.046"    rpy="1.5707963267948966 -1.5707963267948966 3.141592653589793"
+    // wrist_right_ft_joint:     xyz=" 0.00785  0       0"        rpy="1.5707963267948966 0 1.5707963267948966"
+    // wrist_right_tool_joint:   xyz=" 0        0       0.012725" rpy="-1.5707963267948966 -1.5707963267948966 0"
+    // gripper_right_joint:      xyz=" 0.01     0       0"        rpy="1.5707963267948966 1.5707963267948966 -1.5707963267948966"
+    // gripper_right_base_joint: xyz=" 0.       0       0"        rpy="0 3.1416 1.5707"
     // gripper_right_grasping_frame_joint: rpy="0 -1.5708 0" xyz="0 0 0.12"
 
     KDL::ChainFkSolverPos_recursive fkSolverPos(chain);
@@ -167,33 +169,33 @@ TEST_F(KinematicsTest, DH_RightArm_Test)
     KDL::Frame H_dh;
     ASSERT_TRUE(fkSolverPos_dh.JntToCart(q, H_dh) == KDL::SolverI::E_NOERROR);
 
-    ASSERT_TRUE(KDL::Equal(H, H_dh, 1e-4));
+    ASSERT_TRUE(KDL::Equal(H, H_dh, eps));
 
     q = jointVectorToKdl(std::vector<double>(chain.getNrOfJoints(), 0.1));
     ASSERT_TRUE(fkSolverPos.JntToCart(q, H) == KDL::SolverI::E_NOERROR);
     ASSERT_TRUE(fkSolverPos_dh.JntToCart(q, H_dh) == KDL::SolverI::E_NOERROR);
 
-    ASSERT_TRUE(KDL::Equal(H, H_dh, 1e-4));
+    ASSERT_TRUE(KDL::Equal(H, H_dh, eps));
 }
 
-TEST_F(KinematicsTest, DH_LeftArm_Test)
+TEST_F(KinematicsDualTest, DH_LeftArm_Test)
 {
     KDL::Chain chain;
     ASSERT_TRUE(tree.getChain("torso_lift_link", "gripper_left_grasping_frame", chain));
 
     // from `robot_description`:
-    // arm_left_1_joint: rpy="3.141592653589793 0 1.5707963267948966" xyz="0.02556 0.19 -0.171"
-    // arm_left_2_joint: rpy="1.5707963267948966 0.0 0.0" xyz="0.125 -0.0195 0.031"
-    // arm_left_3_joint: rpy="-1.5707963267948966 3.141592653589793 -1.5707963267948966" xyz="0.0895 0.0 -0.0015"
-    // arm_left_4_joint: rpy="1.5707963267948966 -1.5707963267948966 0.0" xyz="-0.02 -0.027 0.222"
-    // arm_left_5_joint: rpy="1.5707963267948966 -1.5707963267948966 -1.5707963267948966" xyz="0.162 -0.02 -0.027"
-    // arm_left_6_joint: rpy="0.0 -1.5707963267948966 -1.5707963267948966" xyz="0 0 -0.15"
-    // arm_left_7_joint: rpy="1.5707963267948966 0.0 1.5707963267948966" xyz="0 0 0"
-    // arm_left_tool_joint: rpy="1.5707963267948966 1.5707963267948966 3.141592653589793" xyz="0 0 -0.046"
-    // wrist_left_ft_joint: rpy="1.5707963267948966 0 1.5707963267948966" xyz="0.00785 0 0"
-    // wrist_left_tool_joint: rpy="-1.5707963267948966 -1.5707963267948966 0" xyz="0 0 0.012725"
-    // gripper_left_joint: rpy="1.5707963267948966 1.5707963267948966 -1.5707963267948966" xyz="0.01 0 0"
-    // gripper_left_base_joint: rpy="0 3.1416 1.5707" xyz="0. 0 0"
+    // arm_left_1_joint:        xyz=" 0.02556 0.19   -0.171"    rpy="3.141592653589793 0 1.5707963267948966"
+    // arm_left_2_joint:        xyz=" 0.125  -0.0195  0.031"    rpy="1.5707963267948966 0.0 0.0"
+    // arm_left_3_joint:        xyz=" 0.0895  0.0    -0.0015"   rpy="-1.5707963267948966 3.141592653589793 -1.5707963267948966"
+    // arm_left_4_joint:        xyz="-0.02   -0.027   0.222"    rpy="1.5707963267948966 -1.5707963267948966 0.0"
+    // arm_left_5_joint:        xyz=" 0.162  -0.02   -0.027"    rpy="1.5707963267948966 -1.5707963267948966 -1.5707963267948966"
+    // arm_left_6_joint:        xyz=" 0       0      -0.15"     rpy="0.0 -1.5707963267948966 -1.5707963267948966"
+    // arm_left_7_joint:        xyz=" 0       0       0"        rpy="1.5707963267948966 0.0 1.5707963267948966"
+    // arm_left_tool_joint:     xyz=" 0       0      -0.046"    rpy="1.5707963267948966 1.5707963267948966 3.141592653589793"
+    // wrist_left_ft_joint:     xyz=" 0.00785 0       0"        rpy="1.5707963267948966 0 1.5707963267948966"
+    // wrist_left_tool_joint:   xyz=" 0       0       0.012725" rpy="-1.5707963267948966 -1.5707963267948966 0"
+    // gripper_left_joint:      xyz=" 0.01    0       0"        rpy="1.5707963267948966 1.5707963267948966 -1.5707963267948966"
+    // gripper_left_base_joint: xyz=" 0.      0       0"        rpy="0 3.1416 1.5707"
     // gripper_left_grasping_frame_joint: rpy="0 -1.5708 0" xyz="0 0 0.12"
 
     KDL::ChainFkSolverPos_recursive fkSolverPos(chain);
@@ -230,8 +232,8 @@ TEST_F(KinematicsTest, DH_LeftArm_Test)
     /* H_1_2 */ chain_dh.addSegment(KDL::Segment(RotZ, KDL::Frame::DH(  0.0,  PI_2,  0.018,  PI_2)));
     /* H_2_3 */ chain_dh.addSegment(KDL::Segment(RotZ, KDL::Frame::DH(-0.02,  PI_2, 0.3115,   0.0)));
     /* H_3_4 */ chain_dh.addSegment(KDL::Segment(RotZ, KDL::Frame::DH( 0.02,  PI_2,    0.0,   0.0)));
-    /* H_4_5 */ chain_dh.addSegment(KDL::Segment(RotZ, KDL::Frame::DH(  0.0, -PI_2, -0.312, -PI_2)));
-    /* H_5_6 */ chain_dh.addSegment(KDL::Segment(RotZ, KDL::Frame::DH(  0.0,  PI_2,    0.0,   0.0)));
+    /* H_4_5 */ chain_dh.addSegment(KDL::Segment(RotZ, KDL::Frame::DH(  0.0,  PI_2, -0.312, -PI_2)));
+    /* H_5_6 */ chain_dh.addSegment(KDL::Segment(RotZ, KDL::Frame::DH(  0.0, -PI_2,    0.0,   0.0)));
     /* H_6_7 */ chain_dh.addSegment(KDL::Segment(RotZ, KDL::Frame::DH(  0.0,   0.0, -0.046,   0.0)));
 
     // H_7_N
@@ -248,16 +250,16 @@ TEST_F(KinematicsTest, DH_LeftArm_Test)
     KDL::Frame H_dh;
     ASSERT_TRUE(fkSolverPos_dh.JntToCart(q, H_dh) == KDL::SolverI::E_NOERROR);
 
-    ASSERT_TRUE(KDL::Equal(H, H_dh, 1e-4));
+    ASSERT_TRUE(KDL::Equal(H, H_dh, eps));
 
     q = jointVectorToKdl(std::vector<double>(chain.getNrOfJoints(), 0.1));
     ASSERT_TRUE(fkSolverPos.JntToCart(q, H) == KDL::SolverI::E_NOERROR);
     ASSERT_TRUE(fkSolverPos_dh.JntToCart(q, H_dh) == KDL::SolverI::E_NOERROR);
 
-    ASSERT_TRUE(KDL::Equal(H, H_dh, 1e-4));
+    ASSERT_TRUE(KDL::Equal(H, H_dh, eps));
 }
 
-TEST_F(KinematicsTest, ST_RightArm_Test)
+TEST_F(KinematicsDualTest, ST_RightArm_Test)
 {
     KDL::Chain chain;
     ASSERT_TRUE(tree.getChain("torso_lift_link", "gripper_right_grasping_frame", chain));
@@ -271,27 +273,27 @@ TEST_F(KinematicsTest, ST_RightArm_Test)
     KDL::Frame H_ST_0(KDL::Rotation::RPY(-PI_2, 0.0, -PI_2), KDL::Vector(0.00456, -1.135075, -0.202));
     rl::PoeExpression poe(H_ST_0);
 
-    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, {0, 0, 1}, {0.02556, -0.19, -0.202}));
-    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, {1, 0, 0}, {0.00456, -0.315, -0.202}));
-    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, {0, 1, 0}, {0.00456, -0.315, -0.202}));
-    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, {-1, 0, 0}, {0.00456, -0.9385, -0.182}));
-    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, {0, -1, 0}, {0.00456, -0.12505, -0.202}));
-    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, {0, 0, -1}, {0.00456, -0.12505, -0.202}));
-    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, {0, -1, 0}, {0.00456, -0.12505, -0.202}));
+    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, { 0,  0,  1}, {0.02556, -0.19,   -0.202}));
+    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, { 1,  0,  0}, {0.00456, -0.315,  -0.202}));
+    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, { 0,  1,  0}, {0.00456, -0.315,  -0.202}));
+    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, {-1,  0,  0}, {0.00456, -0.6265, -0.182}));
+    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, { 0, -1,  0}, {0.00456, -0.9385, -0.202}));
+    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, { 0,  0, -1}, {0.00456, -0.9385, -0.202}));
+    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, { 0, -1,  0}, {0.00456, -0.9385, -0.202}));
 
     KDL::Frame H_ST;
     ASSERT_TRUE(poe.evaluate(q, H_ST));
 
-    ASSERT_TRUE(KDL::Equal(H, H_ST, 1e-4));
+    ASSERT_TRUE(KDL::Equal(H, H_ST, eps));
 
     q = jointVectorToKdl(std::vector<double>(chain.getNrOfJoints(), 0.1));
     ASSERT_TRUE(fkSolverPos.JntToCart(q, H) == KDL::SolverI::E_NOERROR);
     ASSERT_TRUE(poe.evaluate(q, H_ST));
 
-    ASSERT_TRUE(KDL::Equal(H, H_ST, 1e-4));
+    ASSERT_TRUE(KDL::Equal(H, H_ST, eps));
 }
 
-TEST_F(KinematicsTest, ST_LeftArm_Test)
+TEST_F(KinematicsDualTest, ST_LeftArm_Test)
 {
     KDL::Chain chain;
     ASSERT_TRUE(tree.getChain("torso_lift_link", "gripper_left_grasping_frame", chain));
@@ -305,24 +307,24 @@ TEST_F(KinematicsTest, ST_LeftArm_Test)
     KDL::Frame H_ST_0(KDL::Rotation::RPY(PI_2, 0.0, PI_2), KDL::Vector(0.007559, 1.135075, -0.202));
     rl::PoeExpression poe(H_ST_0);
 
-    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, {0, 0, -1}, {0.02556, 0.19, -0.202}));
-    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, {-1, 0, 0}, {0.007559, 0.315, -0.202}));
-    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, {0, 1, 0}, {0.007559, 0.315, -0.202}));
-    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, {1, 0, 0}, {0.007559, 0.9385, -0.182}));
-    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, {0, -1, 0}, {0.007559, 0.12505, -0.202}));
-    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, {0, 0, -1}, {0.007559, 0.12505, -0.202}));
-    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, {0, -1, 0}, {0.007559, 0.12505, -0.202}));
+    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, { 0,  0, -1}, {0.02556,  0.19,   -0.202}));
+    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, {-1,  0,  0}, {0.007559, 0.315,  -0.202}));
+    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, { 0,  1,  0}, {0.007559, 0.315,  -0.202}));
+    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, { 1,  0,  0}, {0.007559, 0.6265, -0.182}));
+    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, { 0, -1,  0}, {0.007559, 0.9385, -0.202}));
+    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, { 0,  0,  1}, {0.007559, 0.9385, -0.202}));
+    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, { 0, -1,  0}, {0.007559, 0.9385, -0.202}));
 
     KDL::Frame H_ST;
     ASSERT_TRUE(poe.evaluate(q, H_ST));
 
-    ASSERT_TRUE(KDL::Equal(H, H_ST, 1e-4));
+    ASSERT_TRUE(KDL::Equal(H, H_ST, eps));
 
     q = jointVectorToKdl(std::vector<double>(chain.getNrOfJoints(), 0.1));
     ASSERT_TRUE(fkSolverPos.JntToCart(q, H) == KDL::SolverI::E_NOERROR);
     ASSERT_TRUE(poe.evaluate(q, H_ST));
 
-    ASSERT_TRUE(KDL::Equal(H, H_ST, 1e-4));
+    ASSERT_TRUE(KDL::Equal(H, H_ST, eps));
 }
 
 int main(int argc, char **argv)
