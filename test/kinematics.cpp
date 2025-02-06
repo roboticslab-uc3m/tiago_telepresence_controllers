@@ -288,8 +288,39 @@ TEST_F(KinematicsTest, ST_RightArm_Test)
     ASSERT_TRUE(fkSolverPos.JntToCart(q, H) == KDL::SolverI::E_NOERROR);
     ASSERT_TRUE(poe.evaluate(q, H_ST));
 
-    std::printf("H.p = [%f %f %f]\n", H.p.x(), H.p.y(), H.p.z());
-    std::printf("H_ST.p = [%f %f %f]\n", H_ST.p.x(), H_ST.p.y(), H_ST.p.z());
+    ASSERT_TRUE(KDL::Equal(H, H_ST, 1e-4));
+}
+
+TEST_F(KinematicsTest, ST_LeftArm_Test)
+{
+    KDL::Chain chain;
+    ASSERT_TRUE(tree.getChain("torso_lift_link", "gripper_left_grasping_frame", chain));
+
+    KDL::ChainFkSolverPos_recursive fkSolverPos(chain);
+    KDL::JntArray q(chain.getNrOfJoints());
+    KDL::Frame H;
+
+    ASSERT_TRUE(fkSolverPos.JntToCart(q, H) == KDL::SolverI::E_NOERROR);
+
+    KDL::Frame H_ST_0(KDL::Rotation::RPY(PI_2, 0.0, PI_2), KDL::Vector(0.007559, 1.135075, -0.202));
+    rl::PoeExpression poe(H_ST_0);
+
+    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, {0, 0, -1}, {0.02556, 0.19, -0.202}));
+    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, {-1, 0, 0}, {0.007559, 0.315, -0.202}));
+    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, {0, 1, 0}, {0.007559, 0.315, -0.202}));
+    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, {1, 0, 0}, {0.007559, 0.9385, -0.182}));
+    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, {0, -1, 0}, {0.007559, 0.12505, -0.202}));
+    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, {0, 0, -1}, {0.007559, 0.12505, -0.202}));
+    poe.append(rl::MatrixExponential(rl::MatrixExponential::ROTATION, {0, -1, 0}, {0.007559, 0.12505, -0.202}));
+
+    KDL::Frame H_ST;
+    ASSERT_TRUE(poe.evaluate(q, H_ST));
+
+    ASSERT_TRUE(KDL::Equal(H, H_ST, 1e-4));
+
+    q = jointVectorToKdl(std::vector<double>(chain.getNrOfJoints(), 0.1));
+    ASSERT_TRUE(fkSolverPos.JntToCart(q, H) == KDL::SolverI::E_NOERROR);
+    ASSERT_TRUE(poe.evaluate(q, H_ST));
 
     ASSERT_TRUE(KDL::Equal(H, H_ST, 1e-4));
 }
