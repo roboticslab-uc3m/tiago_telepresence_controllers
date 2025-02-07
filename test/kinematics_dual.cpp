@@ -227,7 +227,7 @@ TEST_F(KinematicsDualTest, DH_LeftArm_Test)
     // H_torso_0
     chain_dh.addSegment(KDL::Segment(fixed, KDL::Frame(KDL::Rotation::RPY(PI, 0.0, PI_2), KDL::Vector(0.02556, 0.19, -0.171))));
 
-    //                                                 KDL::Frame::DH(    A, alpha,       D, theta)
+    //                                                 KDL::Frame::DH(    A, alpha,      D, theta)
     /* H_0_1 */ chain_dh.addSegment(KDL::Segment(RotZ, KDL::Frame::DH(0.125,  PI_2,  0.031,   0.0)));
     /* H_1_2 */ chain_dh.addSegment(KDL::Segment(RotZ, KDL::Frame::DH(  0.0,  PI_2,  0.018,  PI_2)));
     /* H_2_3 */ chain_dh.addSegment(KDL::Segment(RotZ, KDL::Frame::DH(-0.02,  PI_2, 0.3115,   0.0)));

@@ -43,7 +43,7 @@ namespace
         const auto a = exp1.getOrigin(); // point on axis 1 only
         const auto b = findIntersection(exp2, exp3); // intersection of axes 2 and 3
         const auto d = findIntersection(exp6, exp7); // intersection of axes 5, 6 and 7
-        const auto e = exp7.getOrigin() + exp7.getAxis(); // point on axis 7, but not on 5 nor 6
+        const auto e = exp7.getOrigin() + exp7.getAxis(); // point on axis 7, but not on 6
 
         ScrewTheoryIkProblem::Steps steps;
         steps.emplace_back(std::vector<int>{0}, new TiagoOne(exp1, d, poe.getTransform(), H_0_N_init, q_init(0)));
