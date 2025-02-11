@@ -62,6 +62,16 @@ add_library(${PROJECT_NAME} src/controller_base.cpp
 
 target_link_libraries(${PROJECT_NAME} PRIVATE tiago_st_solvers)
 
+if(CATKIN_ENABLE_TESTING)
+    find_package(rostest REQUIRED)
+
+    add_rostest_gtest(kinematics_test test/kinematics.test test/kinematics.cpp)
+    target_link_libraries(kinematics_test ${catkin_LIBRARIES} tiago_st_solvers)
+
+    add_rostest_gtest(kinematics_dual_test test/kinematics_dual.test test/kinematics_dual.cpp)
+    target_link_libraries(kinematics_dual_test ${catkin_LIBRARIES} tiago_st_solvers)
+endif()
+
 install(TARGETS tiago_st_solvers ${PROJECT_NAME}
     ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
     LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
