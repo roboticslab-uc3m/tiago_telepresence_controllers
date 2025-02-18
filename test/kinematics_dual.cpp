@@ -29,6 +29,8 @@ public:
     }
 
 protected:
+    void doCheck(const KDL::Chain & chain, KDL::ChainFkSolverPos & fkSolverPos, const KDL::JntArray & q);
+
     ros::NodeHandle n;
     KDL::Tree tree;
 
@@ -41,25 +43,14 @@ const double KinematicsDualTest::PI = KDL::PI;
 const double KinematicsDualTest::PI_2 = KDL::PI / 2;
 const double KinematicsDualTest::eps = 1e-4;
 
-bool doCheck(const KDL::Chain & chain, KDL::ChainFkSolverPos & fkSolverPos, const KDL::JntArray & q)
+void KinematicsDualTest::doCheck(const KDL::Chain & chain, KDL::ChainFkSolverPos & fkSolverPos, const KDL::JntArray & q)
 {
     KDL::Frame H;
-
-    if (fkSolverPos.JntToCart(q, H) < 0)
-    {
-        std::printf("JntToCart (1) failed\n");
-        return false;
-    }
+    ASSERT_EQ(fkSolverPos.JntToCart(q, H), KDL::SolverI::E_NOERROR);
 
     ChainIkSolverPos_ST ikSolverPos(chain, H, q);
-
     KDL::JntArray q_st(chain.getNrOfJoints());
-
-    if (ikSolverPos.CartToJnt(q, H, q_st) != KDL::SolverI::E_NOERROR)
-    {
-        std::printf("CartToJnt failed\n");
-        return false;
-    }
+    ASSERT_EQ(ikSolverPos.CartToJnt(q, H, q_st), KDL::SolverI::E_NOERROR);
 
     bool test = true;
 
@@ -69,7 +60,7 @@ bool doCheck(const KDL::Chain & chain, KDL::ChainFkSolverPos & fkSolverPos, cons
         test &= KDL::Equal(q(i), q_st(i));
     }
 
-    return test;
+    ASSERT_TRUE(test);
 }
 
 TEST_F(KinematicsDualTest, ChainIkSolverPos_ST_Test)
@@ -78,10 +69,10 @@ TEST_F(KinematicsDualTest, ChainIkSolverPos_ST_Test)
     ASSERT_TRUE(tree.getChain("torso_lift_link", "gripper_right_grasping_frame", chain));
 
     KDL::ChainFkSolverPos_recursive fkSolverPos(chain);
-    ASSERT_TRUE(doCheck(chain, fkSolverPos, jointVectorToKdl(std::vector<double>(7, 0.0))));
-    ASSERT_TRUE(doCheck(chain, fkSolverPos, jointVectorToKdl(std::vector<double>(7, 0.1))));
-    ASSERT_TRUE(doCheck(chain, fkSolverPos, jointVectorToKdl(std::vector<double>(7, PI_2))));
-    ASSERT_TRUE(doCheck(chain, fkSolverPos, jointVectorToKdl(std::vector<double>(7, PI))));
+    doCheck(chain, fkSolverPos, jointVectorToKdl(std::vector<double>(7, 0.0)));
+    doCheck(chain, fkSolverPos, jointVectorToKdl(std::vector<double>(7, 0.1)));
+    doCheck(chain, fkSolverPos, jointVectorToKdl(std::vector<double>(7, PI_2)));
+    doCheck(chain, fkSolverPos, jointVectorToKdl(std::vector<double>(7, PI)));
 }
 
 TEST_F(KinematicsDualTest, DH_RightArm_Test)
