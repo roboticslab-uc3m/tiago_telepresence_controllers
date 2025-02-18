@@ -11,7 +11,7 @@ namespace
     int findSolutionIndex(ScrewTheoryIkProblem * problem, const KDL::Frame & H_0_N_init, const KDL::JntArray & q_init)
     {
         std::vector<KDL::JntArray> solutions;
-        problem->solve(H_0_N_init, solutions);
+        problem->solve(H_0_N_init, q_init, solutions);
 
         TiagoConfigurationSelector selector;
         selector.configure(solutions);

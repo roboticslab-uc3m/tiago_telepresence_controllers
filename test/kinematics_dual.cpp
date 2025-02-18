@@ -47,7 +47,7 @@ bool doCheck(const KDL::Chain & chain, KDL::ChainFkSolverPos & fkSolverPos, cons
 
     if (fkSolverPos.JntToCart(q, H) < 0)
     {
-        ROS_ERROR("JntToCart (1) failed");
+        std::printf("JntToCart (1) failed\n");
         return false;
     }
 
@@ -57,17 +57,19 @@ bool doCheck(const KDL::Chain & chain, KDL::ChainFkSolverPos & fkSolverPos, cons
 
     if (ikSolverPos.CartToJnt(q, H, q_st) != KDL::SolverI::E_NOERROR)
     {
-        ROS_ERROR("CartToJnt failed");
+        std::printf("CartToJnt failed\n");
         return false;
     }
 
-    if (!KDL::Equal(q, q_st))
+    bool test = true;
+
+    for (int i = 0; i < q.rows(); i++)
     {
-        ROS_ERROR("q != q_st");
-        return false;
+        // the KDL::Equal overload for JntArray always returns false for some reason
+        test &= KDL::Equal(q(i), q_st(i));
     }
 
-    return true;
+    return test;
 }
 
 TEST_F(KinematicsDualTest, ChainIkSolverPos_ST_Test)
@@ -76,8 +78,10 @@ TEST_F(KinematicsDualTest, ChainIkSolverPos_ST_Test)
     ASSERT_TRUE(tree.getChain("torso_lift_link", "gripper_right_grasping_frame", chain));
 
     KDL::ChainFkSolverPos_recursive fkSolverPos(chain);
-    // ASSERT_TRUE(doCheck(chain, fkSolverPos, jointVectorToKdl({0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0})));
-    ASSERT_TRUE(doCheck(chain, fkSolverPos, jointVectorToKdl({0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1})));
+    ASSERT_TRUE(doCheck(chain, fkSolverPos, jointVectorToKdl(std::vector<double>(7, 0.0))));
+    ASSERT_TRUE(doCheck(chain, fkSolverPos, jointVectorToKdl(std::vector<double>(7, 0.1))));
+    ASSERT_TRUE(doCheck(chain, fkSolverPos, jointVectorToKdl(std::vector<double>(7, PI_2))));
+    ASSERT_TRUE(doCheck(chain, fkSolverPos, jointVectorToKdl(std::vector<double>(7, PI))));
 }
 
 TEST_F(KinematicsDualTest, DH_RightArm_Test)

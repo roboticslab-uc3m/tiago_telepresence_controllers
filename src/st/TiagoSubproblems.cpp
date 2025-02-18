@@ -15,10 +15,12 @@ TiagoOne::TiagoOne(const MatrixExponential & _exp, const KDL::Vector & _p, const
       axisPow(vectorPow2(exp.getAxis())),
       u(_p - exp.getOrigin()),
       u_p(u - axisPow * u),
-      H_ST_0(_H_ST_0)
+      H_ST_0(_H_ST_0),
+      initialSolution(0.0),
+      offset(0.0)
 {
     Solutions solutions;
-    solve(_H_0_N_init * H_ST_0.Inverse(), KDL::Frame(), solutions);
+    solve(_H_0_N_init * H_ST_0.Inverse(), KDL::Frame::Identity(), solutions);
     initialSolution = solutions[0][0];
     offset = _theta - initialSolution;
 }
