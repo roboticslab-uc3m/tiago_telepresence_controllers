@@ -1,6 +1,7 @@
 #include "generic_tp_controller.hpp"
 
 #include <atomic>
+#include <memory>
 
 #include <pluginlib/class_list_macros.h>
 #include <geometry_msgs/PoseStamped.h>
@@ -19,12 +20,6 @@ class ArmController : public FrameBufferController<geometry_msgs::PoseStamped>
 {
 public:
     ArmController() : FrameBufferController("arm") { }
-
-    ~ArmController() override
-    {
-        delete fkSolverPos;
-        delete ikSolverVel;
-    }
 
     void onStarting(const std::vector<double> & angles) override
     {
@@ -57,9 +52,8 @@ protected:
 private:
     bool checkReturnCode(int ret);
 
-    KDL::Chain chain;
-    KDL::ChainFkSolverPos_recursive * fkSolverPos {nullptr};
-    KDL::ChainIkSolverVel_pinv * ikSolverVel {nullptr};
+    std::unique_ptr<KDL::ChainFkSolverPos_recursive> fkSolverPos;
+    std::unique_ptr<KDL::ChainIkSolverVel_pinv> ikSolverVel;
 
     KDL::Frame H_0_N_initial;
     KDL::Frame H_0_N_prev;
@@ -98,6 +92,8 @@ bool ArmController::additionalSetup(hardware_interface::PositionJointInterface* 
         return false;
     }
 
+    KDL::Chain chain;
+
     if (!tree.getChain(start_link, end_link, chain))
     {
         ROS_ERROR("[%s] Failed to get chain from kdl tree", getName().c_str());
@@ -121,8 +117,8 @@ bool ArmController::additionalSetup(hardware_interface::PositionJointInterface* 
         return false;
     }
 
-    fkSolverPos = new KDL::ChainFkSolverPos_recursive(chain);
-    ikSolverVel = new KDL::ChainIkSolverVel_pinv(chain, epsVel, maxIterVel);
+    fkSolverPos = std::make_unique<KDL::ChainFkSolverPos_recursive>(chain);
+    ikSolverVel = std::make_unique<KDL::ChainIkSolverVel_pinv>(chain, epsVel, maxIterVel);
 
     return FrameBufferController::additionalSetup(hw, n, description);
 }
@@ -144,9 +140,8 @@ void ArmController::processData(const geometry_msgs::PoseStamped& msg)
 
 KDL::Frame ArmController::convertToBufferType(const std::vector<double> & v)
 {
-    const auto q = jointVectorToKdl(v);
     KDL::Frame H;
-    fkSolverPos->JntToCart(q, H);
+    fkSolverPos->JntToCart(jointVectorToKdl(v), H);
     return H;
 }
 
