@@ -62,7 +62,7 @@ add_library(${PROJECT_NAME} src/controller_base.cpp
                             src/command_buffer.cpp
 )
 
-target_link_libraries(${PROJECT_NAME} PRIVATE tiago_st_solvers)
+target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES})
 
 if(CATKIN_ENABLE_TESTING)
     find_package(rostest REQUIRED)
