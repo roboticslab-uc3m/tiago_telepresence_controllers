@@ -52,6 +52,7 @@ protected:
 private:
     bool checkReturnCode(int ret);
 
+    KDL::Chain chain;
     std::unique_ptr<KDL::ChainFkSolverPos_recursive> fkSolverPos;
     std::unique_ptr<KDL::ChainIkSolverVel_pinv> ikSolverVel;
 
@@ -91,8 +92,6 @@ bool ArmController::additionalSetup(hardware_interface::PositionJointInterface* 
         ROS_ERROR("[%s] Could not find end_link parameter", getName().c_str());
         return false;
     }
-
-    KDL::Chain chain;
 
     if (!tree.getChain(start_link, end_link, chain))
     {
@@ -148,7 +147,7 @@ KDL::Frame ArmController::convertToBufferType(const std::vector<double> & v)
 std::vector<double> ArmController::convertToVector(const KDL::JntArray & q_real, const KDL::Frame & H_0_N, double period)
 {
     // refer to base frame, but leave the reference point intact;
-    // using H_O_N_initial instead of H_0_N_prev for some reason the original author once knew
+    // using H_0_N_initial instead of H_0_N_prev for some reason the original author once knew
     // and now forgot, but hey, it seems to work better this way
     const auto twist = H_0_N_initial.M * KDL::diff(H_0_N_prev, H_0_N, period);
 
