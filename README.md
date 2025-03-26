@@ -4,7 +4,7 @@ Joint controllers for telepresence applications on TIAGo and TIAGo++.
 
 ## Dependencies
 
-This project depends on the [ros_tcp_endpoint](https://github.com/Unity-Technologies/ROS-TCP-Endpoint) package.
+This project depends on the [ros_tcp_endpoint](https://github.com/Unity-Technologies/ROS-TCP-Endpoint) package. On the VR headset side (tested: Meta Quest 2), you will need to install the [tiago-unity-vr](https://github.com/roboticslab-uc3m/tiago-unity-vr) project.
 
 ## Running in simulation
 
@@ -91,3 +91,8 @@ If you found this project useful, please consider citing the following work:
     organization={IEEE},
 }
 ```
+
+## See also
+
+- [roboticslab-uc3m/tiago-unity-vr](https://github.com/roboticslab-uc3m/tiago-unity-vr)
+- [roboticslab-uc3m/tiago_spnav_teleop](https://github.com/roboticslab-uc3m/tiago_spnav_teleop)
