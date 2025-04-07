@@ -94,6 +94,6 @@ If you found this project useful, please consider citing the following work:
 
 ## See also
 
-- [demo application (YouTube)](https://youtu.be/3DYZG5At-Gw)
+- [demo presentation (YouTube)](https://youtu.be/fTSV94tmdCE)
 - [roboticslab-uc3m/tiago-unity-vr](https://github.com/roboticslab-uc3m/tiago-unity-vr)
 - [roboticslab-uc3m/tiago_spnav_teleop](https://github.com/roboticslab-uc3m/tiago_spnav_teleop)
