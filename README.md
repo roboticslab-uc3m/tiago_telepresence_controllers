@@ -89,6 +89,7 @@ If you found this project useful, please consider citing the following work:
     booktitle={Int. Conf. on Autonomous Robot Systems and Competitions (ICARSC)},
     year={2025},
     organization={IEEE},
+    doi={10.1109/ICARSC65809.2025.10970173}
 }
 ```
 
